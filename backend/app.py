@@ -17,7 +17,32 @@ memory = {
 } 
 
 @medical.post("/chat")
-def chat(msg: str = Form(default=""),mode: str = Form()):
+async def chat(msg: str = Form(default=""),mode: str = Form(),file:Optional[UploadFile]=File(None)):
     memory["mode"] = mode 
+
+    #ANALYSIS MODE
     if mode == "analysis":
+        if file:
+
+        elif msg:
+            if not memory["analysis"]:
+            
+            else:
+            
+        else:
+            reply = "Analysis Mode — ανέβασε ένα PDF ή εικόνα!"
+    
+    else: 
+        if not message:
+
+        else:
+
+    
+    return {
+        "reply": reply,
+        "mode":mode,
+        "analysis":memory.get("analysis")
+    }
+
         
+    
