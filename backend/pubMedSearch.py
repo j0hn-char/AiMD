@@ -228,10 +228,8 @@ def get_top_papers(keywords: list[str]) -> list[dict]:
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    from responseComparison import getKeywords
+#if __name__ == "__main__":
 
-    keywords = getKeywords()
-    papers = get_top_papers(keywords)
+    #papers = get_top_papers(keywords)
 # Printing as JSON
-    print(json.dumps(papers, ensure_ascii=False, indent=2))
+    #print(json.dumps(papers, ensure_ascii=False, indent=2))
