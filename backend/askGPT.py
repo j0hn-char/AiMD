@@ -1,11 +1,28 @@
-from backend.chatbotCall import chatbotGPT, chatbotClaude
+import os
+import openai
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 
+openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))      # Use environment variable for security
+
+def callGPT(prompt, numOfResponses):
+    response = openAIclient.chat.completions.create(
+        model="gpt-3.5-turbo",       #(analoga to key)
+        messages=prompt,
+        n=numOfResponses
+    )
+    if numOfResponses == 1:
+        return response.choices[0].message.content.strip()
+    elif numOfResponses == 2:
+        return (
+            response.choices[0].message.content.strip(),
+            response.choices[1].message.content.strip()
+        )
+
 
 def responseComparison(conversation):
-    MAX_ATTEMPTS=4
+    MAX_ATTEMPTS=3
     prompt = (
         "You will be given two medical diagnoses produced by AI chatbots. "
         "Your task is to analyze their consistency — that is, whether they convey "
@@ -28,24 +45,19 @@ def responseComparison(conversation):
         "Respond ONLY with a raw JSON object. Do NOT wrap it in markdown code blocks or backticks."
         )
     for attempt in range(1, MAX_ATTEMPTS+1):
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futureGPT    = executor.submit(chatbotGPT, conversation)
-            futureClaude = executor.submit(chatbotClaude, conversation)
-            responseGPT    = futureGPT.result()
-            responseClaude = futureClaude.result()
-        
+        response1, response2 = callGPT(conversation, 2)
     
-        comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", responseGPT).replace("{DIAGNOSIS_2}", responseClaude)
-        rawResponse = chatbotClaude(comparisonPrompt)
+        comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
+        rawResponse= callGPT([{"role": "user", "content": comparisonPrompt}], 1)
         cleaned = re.sub(r"```json|```", "", rawResponse).strip()
 
-        try:
-            result = json.loads(cleaned)
-        except json.JSONDecodeError as e:
-            print(f"[Attempt {attempt}] JSON parse error: {e}\nRaw: {rawResponse}")
-            if attempt >= MAX_ATTEMPTS:
-                return {"error": "Failed to parse comparison response after max attempts"}
-            continue
+        for parse_attempt in range(3):
+            rawResponse = callGPT([{"role": "user", "content": comparisonPrompt}], 1)
+            try:
+                result = json.loads(cleaned)
+                break  
+            except json.JSONDecodeError:
+                continue  
 
         if result.get("consistent"):
             return result
@@ -53,3 +65,9 @@ def responseComparison(conversation):
         print(f"[Attempt {attempt}] Diagnoses inconsistent, retrying...")
 
     return {"error": "Diagnoses remained inconsistent after maximum attempts"}
+
+def finalizeResponse(response, topPapers):
+    
+    #h ylopoihsh den einai diskolh, tha ejartitei apo to output toy get_top_papers
+
+    return response
