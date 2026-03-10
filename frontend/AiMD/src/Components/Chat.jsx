@@ -57,8 +57,8 @@ export default function Chat({ chat, onUpdateMessages }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
       <h1
-        className="text-6xl sm:text-7xl font-light bg-gradient-to-r
-        from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center"
+        className="text-4xl sm:text-5xl lg:text-7xl font-light bg-gradient-to-r
+  from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center"
       >
         Welcome to AiMD
       </h1>
