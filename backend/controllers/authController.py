@@ -1,14 +1,12 @@
-from datetime import datetime, timedelta,timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import HTTPException, Response, Request, status
-from sqlmodel import Session, select
+from fastapi import HTTPException, Response, status
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
-from models.userModel import User
-from database import get_session
+from database import db
 
 # ── Config ────────────────────────────────────────────────────────────────────
 SECRET_KEY = "your-secret-key-change-in-production"  # move to .env
@@ -52,13 +50,13 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-def set_auth_cookies(response: Response, user_id: int):
+def set_auth_cookies(response: Response, user_id: str):
     access_token = create_token(
-        {"sub": str(user_id)},
+        {"sub": user_id},
         timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     refresh_token = create_token(
-        {"sub": str(user_id), "type": "refresh"},
+        {"sub": user_id, "type": "refresh"},
         timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     )
 
@@ -66,7 +64,7 @@ def set_auth_cookies(response: Response, user_id: int):
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=True,        # HTTPS only — set False for local dev
+        secure=True,        # set False for local dev
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
@@ -83,53 +81,55 @@ def set_auth_cookies(response: Response, user_id: int):
 
 
 # ── Controllers ───────────────────────────────────────────────────────────────
-def register(body: RegisterRequest, response: Response, db: Session):
+async def register(body: RegisterRequest, response: Response):
     # Check if user already exists
-    existing = db.exec(select(User).where(User.email == body.email)).first()
+    existing = await db["users"].find_one({"email": body.email})
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered"
         )
 
-    # Create user
-    user = User(
-        email=body.email,
-        password=hash_password(body.password)
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    # Create user document
+    user = {
+        "email": body.email,
+        "password": hash_password(body.password),
+        "created_at": datetime.now(timezone.utc)
+    }
 
-    # Set cookies + return tokens
-    access_token, refresh_token = set_auth_cookies(response, user.id)
+    result = await db["users"].insert_one(user)
+    user_id = str(result.inserted_id)
+
+    access_token, _ = set_auth_cookies(response, user_id)
 
     return {
         "message": "Registered successfully",
-        "user": {"id": user.id, "email": user.email},
-        "access_token": access_token,   # also in cookie
+        "user": {"id": user_id, "email": body.email},
+        "access_token": access_token,
     }
 
 
-def login(body: LoginRequest, response: Response, db: Session):
-    user = db.exec(select(User).where(User.email == body.email)).first() 
+async def login(body: LoginRequest, response: Response):
+    # Find user by email
+    user = await db["users"].find_one({"email": body.email})
 
-    if not user or not verify_password(body.password, user.password):
+    if not user or not verify_password(body.password, user["password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
 
-    access_token, refresh_token = set_auth_cookies(response, user.id)
+    user_id = str(user["_id"])
+    access_token, _ = set_auth_cookies(response, user_id)
 
     return {
         "message": "Logged in successfully",
-        "user": {"id": user.id, "email": user.email},
+        "user": {"id": user_id, "email": user["email"]},
         "access_token": access_token,
     }
 
 
-def logout(response: Response):
+async def logout(response: Response):
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
