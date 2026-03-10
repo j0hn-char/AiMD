@@ -11,8 +11,11 @@ switchIsOn=True #O diakoptis poy kathorizei to epipedo tis analysis, erxete apo 
 
 if(switchIsOn): 
     response=responseComparison(conversation)
-    #topPapers=get_top_papers(response["pubmed_keywords"])
-    #response=finalizeResponse(response, topPapers)
+    #if gia consistancy 
+        #top_papers=get_top_papers(response["pubmed_keywords"])
+             #to pernei etoimo lina
+        #get_relevant_chunks(response["content"],top_papers)
+        #response=finalizeResponse(response, topPapers)
 else:
     response=callGPT(conversation)
 
