@@ -7,7 +7,7 @@ export default function Sidebar({ chats, activeChatId, onSelect, onNew, onDelete
     <div className="relative flex">
       {/* Sidebar */}
       <div className={`min-h-screen bg-gray-900/80 border-r border-gray-700
-        flex flex-col transition-all duration-300 ${isOpen ? "w-80" : "w-0 overflow-hidden border-none"}`}>
+        flex flex-col transition-all duration-300 ${isOpen ? "w-60" : "w-0 overflow-hidden border-none"}`}>
         <div className={`flex flex-col p-4 gap-3 flex-1 transition-opacity duration-200
           ${isOpen ? "opacity-100" : "opacity-0"}`}>
           <h1 className="text-4xl font-light text-transparent bg-clip-text bg-gradient-to-r
