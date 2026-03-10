@@ -8,11 +8,9 @@ ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EMAIL = "ics24128@uom.edu.gr"
 FETCH_LIMIT = 20
 
-
 def build_query(keywords: list[str]) -> str:
     #keywords are combined in a pubMed query string
-    return " AND ".join(f'"{kw}"[All Fields]' for kw in keywords)
-
+    return " OR ".join(f'"{kw}"[MeSH Terms]' for kw in keywords)
 
 def search_pubmed(query: str, max_results: int = FETCH_LIMIT) -> list[str]:
     
@@ -100,7 +98,7 @@ def parse_metadata_xml(xml_text: str) -> list[dict]:
             "pmid":        pmid,
             "pmcid":       pmcid,
             "title":       title,
-            "authors": authors,
+            "authors":     authors,
             "journal":     journal,
             "year":        year,
             "volume":      volume,
@@ -228,8 +226,20 @@ def get_top_papers(keywords: list[str]) -> list[dict]:
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-#if __name__ == "__main__":
-
-    #papers = get_top_papers(keywords)
+if __name__ == "__main__":
+   
+    pubmed_keywords = [
+    "Acute Bronchitis",
+    "Upper Respiratory Tract Infections",
+    "Influenza, Human",
+    "COVID-19",
+    "Community-Acquired Pneumonia",
+    "Cough",
+    "Fever",
+    "Respiratory Tract Infections",
+    "Sputum",
+    "Chest Radiography"
+]
+    papers = get_top_papers(pubmed_keywords)
 # Printing as JSON
-    #print(json.dumps(papers, ensure_ascii=False, indent=2))
+    print(json.dumps(papers, ensure_ascii=False, indent=2))
