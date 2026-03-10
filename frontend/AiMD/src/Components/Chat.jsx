@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import ChatWindow from "./ChatWindow";
 import ChatInput from "./ChatInput";
 
-export default function Chat({ chat, onUpdateMessages }) {
+export default function Chat({ chat, onUpdateMessages, token }) {
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [fileName, setFileName] = useState(null);
@@ -30,20 +30,45 @@ export default function Chat({ chat, onUpdateMessages }) {
     setFileName(null);
     setIsThinking(true);
 
-    // Replace with real API call
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append("message", message);
+      if (file) formData.append("file", file);
+
+      const endpoint = mode === "thinking" ? "/api/analysis" : "/api/chat";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+
       const replied = [
         ...newMessages,
         {
-          content: mode == "thinking" ? "im thinking" : "here to chat",
+          content: data.reply,
           isUser: false,
           file: null,
           id: Date.now() + Math.random(),
         },
       ];
       onUpdateMessages(replied);
+    } catch (err) {
+      const replied = [
+        ...newMessages,
+        {
+          content: "Something went wrong. Please try again.",
+          isUser: false,
+          file: null,
+          id: Date.now() + Math.random(),
+        },
+      ];
+      onUpdateMessages(replied);
+    } finally {
       setIsThinking(false);
-    }, 2000);
+    }
   };
 
   const handleKeyPress = (event) => {

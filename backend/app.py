@@ -1,13 +1,14 @@
 from fastapi import FastAPI
-from routes.mediverifyRoutes import router
+from backend.routes.mediverifyRoutes import router
 from dotenv import load_dotenv
-from file_processor import process_file
 
 load_dotenv()
 
-medical = FastAPI()
+# Make sure docs are enabled
+medical = FastAPI(
+    title="MediVerify API",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
 medical.include_router(router)
-
-
-        
-    
