@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client = motor.motor_asyncio.AsyncIOMotorClient(os.getenv("MONGODB_URL"))
+client = motor.motor_asyncio.AsyncIOMotorClient(os.getenv("MONGO_DB_URL"))
 db = client[os.getenv("DB_NAME", "mediverify")]
 
 # Collections
