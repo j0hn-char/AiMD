@@ -1,7 +1,7 @@
 from fastapi import HTTPException, Request, Response
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
-from backend.src.database import users_collection
+from src.database import users_collection
 import os
 from dotenv import load_dotenv
 

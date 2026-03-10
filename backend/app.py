@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from backend.routes.mediverifyRoutes import router
+from routes.mediverifyRoutes import router
 from dotenv import load_dotenv
 
 load_dotenv()

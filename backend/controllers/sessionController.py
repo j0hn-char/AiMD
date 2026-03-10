@@ -1,5 +1,5 @@
 from fastapi import HTTPException, Request, status
-from backend.src.sessionStorage import (
+from src.sessionStorage import (
     get_session,
     get_user_sessions,
     save_session,

@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 import os
 from dotenv import load_dotenv
 
-from backend.src.database import db
+from src.database import db
 
 load_dotenv()
 SECRET_KEY = os.getenv("JWT_SECRET")
