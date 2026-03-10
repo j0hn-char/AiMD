@@ -52,6 +52,11 @@ def responseComparison(conversation):
         comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
         #rawResponse= callGPT([{"role": "user", "content": comparisonPrompt}], 1)
 
+        result = {
+            "consistent": False,
+            "combined_diagnosis": "",
+            "pubmed_keywords":[]
+        }
         for parse_attempt in range(3):
             rawResponse = callGPT([{"role": "user", "content": comparisonPrompt}], 1)
             cleaned = re.sub(r"```json|```", "", rawResponse).strip()
@@ -93,5 +98,5 @@ def finalizeResponse(response, topPapers):
         """.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
            
             
-    response=callGPT(prompt,1)
-    return response
+    final_response=callGPT(prompt,1)
+    return final_response

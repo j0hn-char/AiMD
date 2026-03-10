@@ -1,14 +1,18 @@
 from fastapi import FastAPI
+from fastapi.security import HTTPBearer
 from routes.mediverifyRoutes import router
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
-# Make sure docs are enabled
 medical = FastAPI(
     title="MediVerify API",
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-medical.include_router(router)
+# Αυτό προσθέτει το κουμπί "Authorize" στο Swagger UI
+security = HTTPBearer()
+
+medical.include_router(router, prefix="/api")
