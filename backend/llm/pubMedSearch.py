@@ -8,6 +8,7 @@ ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EMAIL = "ics24128@uom.edu.gr"
 FETCH_LIMIT = 20
 
+
 def build_query(keywords: list[str]) -> str:
     #keywords are combined in a pubMed query string
     return " OR ".join(f'"{kw}"[MeSH Terms]' for kw in keywords)

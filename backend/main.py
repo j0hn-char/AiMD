@@ -1,4 +1,4 @@
-from backend.askGPT import callGPT, responseComparison, finalizeResponse
+from backend.llm.askGPT import callGPT, responseComparison, finalizeResponse
 
 conversation = []
 
