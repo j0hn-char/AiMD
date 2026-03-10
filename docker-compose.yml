@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=mongodb+srv://webweel:legobion@cluster0.9dj8qcf.mongodb.net/?appName=Cluster0
+
+  frontend:
+    build: ./frontend/AiMD
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
