@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from controllers.authController import register, login, logout
 from controllers.chatController import chat
+from controllers.refreshController import refresh
 from controllers.sessionController import get_session_route
 
 router = APIRouter()
@@ -17,6 +18,10 @@ async def login_route():
 @router.post("/auth/logout")
 async def logout_route():
     return logout()  
+
+@router.post("/auth/refresh")
+async def refresh_route():
+    return refresh()
 
 #CHAT 
 @router.post("/chat")
