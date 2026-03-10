@@ -5,11 +5,16 @@ from fastapi import HTTPException, Response, status
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
+import os
+from dotenv import load_dotenv
 
-from database import db
+from src.database import db
+
+load_dotenv()
+SECRET_KEY = os.getenv("JWT_SECRET")
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SECRET_KEY = "your-secret-key-change-in-production"  # move to .env
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
