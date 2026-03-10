@@ -1,8 +1,12 @@
 import { useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
+import AuthPage from "./components/AuthPage";
 
 function App() {
+  const [token, setToken] = useState(localStorage.getItem("token") || "dev-token");
+
   const [chats, setChats] = useState([
     { id: 1, title: "New Chat", messages: [] }
   ]);
@@ -32,7 +36,6 @@ function App() {
     setChats((prev) =>
       prev.map((c) => {
         if (c.id !== id) return c;
-        // Use first user message as title
         const firstUserMsg = messages.find((m) => m.isUser);
         const title = firstUserMsg
           ? firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? "..." : "")
@@ -42,22 +45,44 @@ function App() {
     );
   };
 
+  const handleLogin = (jwt) => {
+    localStorage.setItem("token", jwt);
+    setToken(jwt);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setToken(null);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950
-      flex">
-      <Sidebar
-        chats={chats}
-        activeChatId={activeChatId}
-        onSelect={setActiveChatId}
-        onNew={createNewChat}
-        onDelete={deleteChat}
-      />
-      <Chat
-        key={activeChatId}
-        chat={activeChat}
-        onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
-      />
-    </div>
+    <Routes>
+      {/* If not logged in, redirect to /auth */}
+      <Route path="/auth" element={
+        token ? <Navigate to="/" /> : <AuthPage onLogin={handleLogin} />
+      } />
+      <Route path="/" element={
+        !token ? <Navigate to="/auth" /> : (
+          <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950 flex">
+            <Sidebar
+              chats={chats}
+              activeChatId={activeChatId}
+              onSelect={setActiveChatId}
+              onNew={createNewChat}
+              onDelete={deleteChat}
+              onLogout={handleLogout}
+            />
+            <Chat
+              key={activeChatId}
+              chat={activeChat}
+              onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
+              token={token}
+            />
+          </div>
+        )
+      } />
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
   );
 }
 
