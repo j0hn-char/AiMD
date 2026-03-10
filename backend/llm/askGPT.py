@@ -3,6 +3,9 @@ import openai
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
+from dotenv import load_dotenv
+from typer import prompt
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))      # Use environment variable for security
 
@@ -98,5 +101,5 @@ def finalizeResponse(response, topPapers):
         """.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
            
             
-    final_response=callGPT(prompt,1)
+    final_response=callGPT([{"role": "user", "content": prompt}], 1)
     return final_response
