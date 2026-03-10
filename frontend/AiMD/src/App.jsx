@@ -1,18 +1,48 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import Sidebar from "./components/Sidebar";
-import Chat from "./components/Chat";
-import AuthPage from "./components/AuthPage";
+import Sidebar from "./Components/Sidebar";
+import Chat from "./Components/Chat";
+import AuthPage from "./Components/AuthPage";
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token") || "dev-token");
-
-  const [chats, setChats] = useState([
-    { id: 1, title: "New Chat", messages: [] }
-  ]);
-  const [activeChatId, setActiveChatId] = useState(1);
+  const [chats, setChats] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
+
+  // Fetch chats whenever token changes (on login)
+  useEffect(() => {
+    if (!token) return;
+    fetchChats();
+  }, [token]);
+
+  const fetchChats = async () => {
+    setIsLoadingChats(true);
+    try {
+      const res = await fetch("/api/chats", {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (data.chats && data.chats.length > 0) {
+        setChats(data.chats);
+        setActiveChatId(data.chats[0].id);
+      } else {
+        const newChat = { id: Date.now(), title: "New Chat", messages: [] };
+        setChats([newChat]);
+        setActiveChatId(newChat.id);
+      }
+    } catch (err) {
+      // Fallback for dev mode
+      const newChat = { id: Date.now(), title: "New Chat", messages: [] };
+      setChats([newChat]);
+      setActiveChatId(newChat.id);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  };
 
   const createNewChat = () => {
     const newChat = { id: Date.now(), title: "New Chat", messages: [] };
@@ -53,11 +83,12 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     setToken(null);
+    setChats([]);
+    setActiveChatId(null);
   };
 
   return (
     <Routes>
-      {/* If not logged in, redirect to /auth */}
       <Route path="/auth" element={
         token ? <Navigate to="/" /> : <AuthPage onLogin={handleLogin} />
       } />
@@ -72,12 +103,18 @@ function App() {
               onDelete={deleteChat}
               onLogout={handleLogout}
             />
-            <Chat
-              key={activeChatId}
-              chat={activeChat}
-              onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
-              token={token}
-            />
+            {isLoadingChats ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="animate-spin w-8 h-8 border-2 border-white/30 border-t-white rounded-full"></div>
+              </div>
+            ) : activeChat ? (
+              <Chat
+                key={activeChatId}
+                chat={activeChat}
+                onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
+                token={token}
+              />
+            ) : null}
           </div>
         )
       } />
