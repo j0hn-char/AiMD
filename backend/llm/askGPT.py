@@ -52,6 +52,11 @@ def responseComparison(conversation):
         comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
         #rawResponse= callGPT([{"role": "user", "content": comparisonPrompt}], 1)
 
+        result = {
+            "consistent": False,
+            "combined_diagnosis": "",
+            "pubmed_keywords":[]
+        }
         for parse_attempt in range(3):
             rawResponse = callGPT([{"role": "user", "content": comparisonPrompt}], 1)
             cleaned = re.sub(r"```json|```", "", rawResponse).strip()
@@ -70,6 +75,28 @@ def responseComparison(conversation):
 
 def finalizeResponse(response, topPapers):
     
-    #h ylopoihsh den einai diskolh, tha ejartitei apo to output toy get_top_papers
+    papers_text = ""
+    for paper in topPapers:
+        papers_text += f"[{paper['citation']}] {paper['text']}\n\n"
+    
+    prompt="""You will be given a medical diagnosis and a set of excerpts from scientific papers, each accompanied by its citation.
+            Diagnosis:
+            {DIAGNOSIS}
+            Paper Excerpts:
+            {PAPERS}
+            (Each entry in PAPERS follows the format: [Citation] Excerpt text)
+            Your task is to write a cohesive, professional medical text that:
 
-    return response
+            Presents the diagnosis as the central claim.
+            Weaves in the provided paper excerpts to support, confirm, or elaborate on the diagnosis wherever relevant.
+            Places the citation immediately after each use of a paper excerpt, in inline format, e.g.: "...viral bronchitis is typically self-limiting (Smith et al., 2021)."
+            Only uses the provided excerpts — do not cite or invent any external sources.
+            If a paper excerpt does not support the diagnosis, acknowledge the discrepancy briefly rather than forcing a false confirmation.
+            Writes in a clear, clinical tone suitable for a medical report.
+
+            Respond only with the final text. Do not include any preamble, explanation, or commentary outside the medical report itself.
+        """.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
+           
+            
+    final_response=callGPT(prompt,1)
+    return final_response
