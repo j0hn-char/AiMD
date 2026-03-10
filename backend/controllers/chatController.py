@@ -2,7 +2,7 @@ from fastapi import Form, File, UploadFile, HTTPException, Depends
 from typing import Optional
 import os
 from file_processor import process_file
-from chatbotCall import chatbotGPT, chatbotClaude
+from chatbotCall import chatbotGPT
 
 memory = {
     "history": [],
