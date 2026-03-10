@@ -35,11 +35,10 @@ class LoginRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
+    return pwd_context.hash(password[:72])
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(plain[:72], hashed)
 
 
 def create_token(data: dict, expires_delta: timedelta) -> str:
