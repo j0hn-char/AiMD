@@ -1,5 +1,5 @@
-from backend.llm.askGPT import callGPT, responseComparison, finalizeResponse
-from backend.llm.pubMedSearch import get_top_papers
+from llm.askGPT import callGPT, responseComparison, finalizeResponse
+from llm.pubMedSearch import get_top_papers
 
 conversation = []
 

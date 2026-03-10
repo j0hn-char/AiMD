@@ -1,5 +1,5 @@
 from fastapi import HTTPException, Request, status
-from backend.src.sessionStorage import (
+from src.sessionStorage import (
     get_session,
     get_user_sessions,
     save_session,
@@ -57,7 +57,12 @@ async def get_user_sessions_route(request: Request, user: dict):
 # ── CREATE SESSION ────────────────────────────────────────────────────────────
 async def create_session_route(request: Request, user: dict):
     user_id = user.get("sub")
-    body = await request.json()
+    
+    # Χειρίσου άδειο body
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
 
     session_id = str(uuid.uuid4())
 
