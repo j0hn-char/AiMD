@@ -2,6 +2,7 @@ import json
 import requests
 import xml.etree.ElementTree as ET
 import time
+from extract_relevant_text import get_relevant_chunks
 
 #configuration
 ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -178,7 +179,7 @@ def _extract_text_from_pmc_xml(xml_text: str) -> str:
 
     return "\n".join(chunks).strip()
 
-def get_top_papers(keywords: list[str]) -> list[dict]:
+def get_top_papers(ai_diagnosis) -> list[dict]:
     """
     1. Builds the query from given keywords for PubMed
     2. Fetches the most relevant PMIDs
@@ -186,6 +187,7 @@ def get_top_papers(keywords: list[str]) -> list[dict]:
     4. Fetches full text for each one of them
     5. Returns a json list which contains the following information: url, title, citation (APA), full_text
     """
+    keywords = ai_diagnosis["pubmed_keywords"]
     print(f"Keywords : {keywords}")
     query = build_query(keywords)
     print(f"Query    : {query}\n")
@@ -200,7 +202,7 @@ def get_top_papers(keywords: list[str]) -> list[dict]:
 
     articles = fetch_metadata(pmids)
 
-    results = []
+    papers = []
     for article in articles:
         pmcid = article["pmcid"]
 
@@ -213,15 +215,16 @@ def get_top_papers(keywords: list[str]) -> list[dict]:
 
         full_text = fetch_full_text(pmcid)
         if not full_text:
-            continue
-
-        results.append({
+            continue 
+        
+        papers.append({
             "url":       article["url"],
             "title":     article["title"],
             "citation":  build_apa_citation(article),
-            "full_text": full_text,
+            "text": full_text,
         })
 
+    results = get_relevant_chunks(ai_diagnosis["combined_diagnosis"], papers)    
     print(f"\n{len(results)} articles with full access out of {len(pmids)} in total.\n")
     return results
 
@@ -229,18 +232,23 @@ def get_top_papers(keywords: list[str]) -> list[dict]:
 
 if __name__ == "__main__":
    
-    pubmed_keywords = [
-    "Acute Bronchitis",
-    "Upper Respiratory Tract Infections",
-    "Influenza, Human",
-    "COVID-19",
-    "Community-Acquired Pneumonia",
-    "Cough",
-    "Fever",
-    "Respiratory Tract Infections",
-    "Sputum",
-    "Chest Radiography"
-]
-    papers = get_top_papers(pubmed_keywords)
+    ai_diagnosis = {
+        "consistent": True,
+        "combined_diagnosis": "The patient presents with headache, productive cough, and low-grade fever (approximately 37.1–37.9°C), a symptom cluster most consistent with an acute respiratory tract infection, most likely of viral etiology. The differential diagnosis includes acute viral bronchitis and viral upper respiratory infection (common cold) as the leading possibilities. Other potential causes include influenza, COVID-19 infection, early or mild community-acquired pneumonia if symptoms worsen or sputum becomes purulent, and acute sinusitis with post-nasal drip contributing to cough and headache. Recommended evaluation includes monitoring vital signs (temperature, respiratory rate, and oxygen saturation), performing lung auscultation, and assessing sputum characteristics. Diagnostic testing such as COVID-19 or influenza testing may be appropriate, with additional laboratory studies (e.g., CBC, CRP) and chest radiography considered if bacterial infection or pneumonia is suspected. Medical evaluation is recommended if symptoms persist for several days, worsen, or are accompanied by high fever, shortness of breath, chest pain, or significant fatigue.",
+        "pubmed_keywords": [
+            "Acute Bronchitis",
+            "Upper Respiratory Tract Infections",
+            "Influenza, Human",
+            "COVID-19",
+            "Community-Acquired Pneumonia",
+            "Cough",
+            "Fever",
+            "Respiratory Tract Infections",
+            "Sputum",
+            "Chest Radiography"
+        ]
+    }
+    
+    papers = get_top_papers(ai_diagnosis)
 # Printing as JSON
     print(json.dumps(papers, ensure_ascii=False, indent=2))

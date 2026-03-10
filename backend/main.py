@@ -12,7 +12,7 @@ switchIsOn=True #O diakoptis poy kathorizei to epipedo tis analysis, erxete apo 
 if(switchIsOn): 
     response=responseComparison(conversation)
     #if gia consistancy 
-        #top_papers=get_top_papers(response["pubmed_keywords"])
+        #top_papers=get_top_papers(response)
              #to pernei etoimo lina
         #get_relevant_chunks(response["content"],top_papers)
         #response=finalizeResponse(response, topPapers)
