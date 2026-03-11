@@ -38,7 +38,7 @@ def chatbotGemini(conversation: str) -> str:
     return response.text
 
 def responseComparison(conversation):
-    MAX_ATTEMPTS=3
+    MAX_ATTEMPTS=2
     prompt = (
         "You will be given two medical diagnoses produced by AI chatbots. "
         "Your task is to analyze their consistency — that is, whether they convey "
@@ -63,8 +63,11 @@ def responseComparison(conversation):
         "Include condition names, relevant pathogens, symptoms, and diagnostic methods where appropriate."
     )
     for attempt in range(1, MAX_ATTEMPTS+1):
-        response1= callGPT(conversation)
-        response2 = chatbotGemini(conversation)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future1 = executor.submit(callGPT, conversation)
+            future2 = executor.submit(chatbotGemini, conversation)
+            response1 = future1.result()
+            response2 = future2.result()
 
         comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
         #rawResponse= callGPT([{"role": "user", "content": comparisonPrompt}])
