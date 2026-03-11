@@ -1,4 +1,4 @@
-from llm.askGPT import callGPT, responseComparison, finalizeResponse
+from AiMD.backend.llm.askAI import callGPT, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 
 conversation = []
@@ -19,7 +19,7 @@ if switchIsOn:
         #error message   
         print("error") 
 else:
-    response=callGPT(conversation, 1)
+    response=callGPT(conversation)
 
 conversation.append({"role": "assistant", "content": response})
 
