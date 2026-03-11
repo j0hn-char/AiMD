@@ -5,24 +5,37 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from typer import prompt
+import google.generativeai as genai
+import os
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))      # Use environment variable for security
+geminiClient = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))      # Use environment variable for security
 
-def callGPT(prompt, numOfResponses):
+def callGPT(prompt):
     response = openAIclient.chat.completions.create(
         model="gpt-5.1",       #(analoga to key)
-        messages=prompt,
-        n=numOfResponses
+        messages=prompt
     )
-    if numOfResponses == 1:
-        return response.choices[0].message.content.strip()
-    elif numOfResponses == 2:
-        return (
-            response.choices[0].message.content.strip(),
-            response.choices[1].message.content.strip()
-        )
+    return response.choices[0].message.content.strip()
+   
 
+
+def chatbotGemini(conversation: str) -> str:
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=(
+            "You are an experienced medical assistant. "
+            "Analyze the provided medical information carefully and provide "
+            "a clear, professional diagnosis with recommendations."
+        )
+    )
+    
+    response = model.generate_content(conversation)
+    return response.text
 
 def responseComparison(conversation):
     MAX_ATTEMPTS=3
@@ -50,10 +63,11 @@ def responseComparison(conversation):
         "Include condition names, relevant pathogens, symptoms, and diagnostic methods where appropriate."
     )
     for attempt in range(1, MAX_ATTEMPTS+1):
-        response1, response2 = callGPT(conversation, 2)
-    
+        response1= callGPT(conversation)
+        response2 = chatbotGemini(conversation)
+
         comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
-        #rawResponse= callGPT([{"role": "user", "content": comparisonPrompt}], 1)
+        #rawResponse= callGPT([{"role": "user", "content": comparisonPrompt}])
 
         result = {
             "consistent": False,
@@ -61,7 +75,7 @@ def responseComparison(conversation):
             "pubmed_keywords":[]
         }
         for parse_attempt in range(3):
-            rawResponse = callGPT([{"role": "user", "content": comparisonPrompt}], 1)
+            rawResponse = callGPT([{"role": "user", "content": comparisonPrompt}])
             cleaned = re.sub(r"```json|```", "", rawResponse).strip()
             try:
                 result = json.loads(cleaned)
@@ -101,5 +115,5 @@ def finalizeResponse(response, topPapers):
         """.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
            
             
-    final_response=callGPT([{"role": "user", "content": prompt}], 1)
+    final_response=callGPT([{"role": "user", "content": prompt}])
     return final_response
