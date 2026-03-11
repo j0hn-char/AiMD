@@ -21,7 +21,7 @@ export default function Sidebar({
           ${isOpen ? "opacity-100" : "opacity-0"}`}
         >
           <div className="flex items-center justify-center gap-2 py-4 pb-6">
-            <img src="/logo.svg" className="w-12 h-12" />
+            <img src="/logo.svg" className="w-32 h-32" />
           </div>
           <button
             onClick={onNew}
