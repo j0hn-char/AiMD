@@ -5,7 +5,7 @@ import Chat from "./Components/Chat";
 import AuthPage from "./Components/AuthPage";
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem("token") || "dev-token");
+  const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
