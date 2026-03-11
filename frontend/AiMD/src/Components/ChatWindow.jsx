@@ -3,7 +3,7 @@ import ThinkingBubble from "./ThinkingBubble";
 
 export default function ChatWindow({ messages, isThinking, messagesEndRef }) {
   return (
-    <div className="h-150 overflow-y-auto border-b border-gray-600
+    <div className="flex-1 min-h-0 overflow-y-auto border-b border-gray-600
       mb-6 p-4 bg-gradient-to-b from-gray-900/50 to-gray-800/50 rounded-2xl">
       {messages.length === 0 && (
         <div className="text-center text-gray-400 mt-20">
