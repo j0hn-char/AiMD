@@ -12,7 +12,6 @@ function App() {
 
   const activeChat = chats.find((c) => c.id === activeChatId);
 
-  // Fetch chats whenever token changes (on login)
   useEffect(() => {
     if (!token) return;
     fetchChats();
@@ -35,7 +34,6 @@ function App() {
         setActiveChatId(newChat.id);
       }
     } catch (err) {
-      // Fallback for dev mode
       const newChat = { id: Date.now(), title: "New Chat", messages: [] };
       setChats([newChat]);
       setActiveChatId(newChat.id);

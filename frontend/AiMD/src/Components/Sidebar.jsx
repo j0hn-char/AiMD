@@ -12,7 +12,6 @@ export default function Sidebar({
 
   return (
     <div className="relative flex">
-      {/* Sidebar */}
       <div
         className={`min-h-screen bg-gray-900/80 border-r border-gray-700
         flex flex-col transition-all duration-300 ${isOpen ? "w-60" : "w-0 overflow-hidden border-none"}`}
@@ -21,12 +20,9 @@ export default function Sidebar({
           className={`flex flex-col p-4 gap-3 flex-1 transition-opacity duration-200
           ${isOpen ? "opacity-100" : "opacity-0"}`}
         >
-          <h1
-            className="text-4xl font-light text-transparent bg-clip-text bg-gradient-to-r
-            from-sky-400 via-cyan-300 to-teal-400 text-center py-4 pb-6 whitespace-nowrap"
-          >
-            AiMD
-          </h1>
+          <div className="flex items-center justify-center gap-2 py-4 pb-6">
+            <img src="/logo.svg" className="w-12 h-12" />
+          </div>
           <button
             onClick={onNew}
             className="w-full px-4 py-2 bg-gradient-to-r from-sky-500 to-cyan-500
@@ -41,10 +37,9 @@ export default function Sidebar({
                 onClick={() => onSelect(chat.id)}
                 className={`group flex items-center justify-between px-3 py-2 rounded-xl
                   cursor-pointer transition text-sm
-                  ${
-                    activeChatId === chat.id
-                      ? "bg-sky-600/40 text-white border border-sky-500/50"
-                      : "text-gray-400 hover:bg-gray-700/50 hover:text-white"
+                  ${activeChatId === chat.id
+                    ? "bg-sky-600/40 text-white border border-sky-500/50"
+                    : "text-gray-400 hover:bg-gray-700/50 hover:text-white"
                   }`}
               >
                 <span className="truncate flex-1">💬 {chat.title}</span>

@@ -36,7 +36,7 @@ export default function AuthPage({ onLogin }) {
         return;
       }
 
-      onLogin(data.acess_token);
+      onLogin(data.access_token);
     } catch (err) {
       setError("Could not connect to server.");
     } finally {
@@ -52,8 +52,9 @@ export default function AuthPage({ onLogin }) {
     <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950
       flex flex-col items-center justify-center p-4 gap-8">
 
+      <img src="/logo.svg" className="w-32 h-32" />
       <h1 className="text-6xl sm:text-7xl font-light bg-gradient-to-r
-        from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center">
+      from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center">
         AiMD
       </h1>
 
