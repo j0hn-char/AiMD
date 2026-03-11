@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from routes.mediverifyRoutes import router
 from dotenv import load_dotenv
@@ -12,7 +13,14 @@ medical = FastAPI(
     redoc_url="/redoc"
 )
 
-# Αυτό προσθέτει το κουμπί "Authorize" στο Swagger UI
 security = HTTPBearer()
+
+medical.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 medical.include_router(router, prefix="/api")

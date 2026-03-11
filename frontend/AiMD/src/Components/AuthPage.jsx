@@ -32,11 +32,11 @@ export default function AuthPage({ onLogin }) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.message || "Something went wrong.");
+        setError(data.detail || data.message || "Something went wrong.");
         return;
       }
 
-      onLogin(data.token);
+      onLogin(data.acess_token);
     } catch (err) {
       setError("Could not connect to server.");
     } finally {
@@ -83,6 +83,8 @@ export default function AuthPage({ onLogin }) {
         <div className="flex flex-col gap-3">
           <input
             type="email"
+            id="email"
+            name="email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -93,6 +95,8 @@ export default function AuthPage({ onLogin }) {
           />
           <input
             type="password"
+            id="password"
+            name="password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -104,6 +108,8 @@ export default function AuthPage({ onLogin }) {
           {!isLogin && (
             <input
               type="password"
+              id="confirmPassword"
+              name="confirmPassword"
               placeholder="Confirm Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
