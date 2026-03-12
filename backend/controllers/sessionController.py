@@ -1,3 +1,11 @@
+"""
+sessionController.py
+────────────────────
+Διαχειρίζεται τη λογική των sessions.
+Αλλαγή: το title του session παράγεται αυτόματα από το πρώτο μήνυμα
+         του χρήστη μέσω του GPT.
+"""
+
 from fastapi import HTTPException, Request, status
 from src.sessionStorage import (
     get_session,
@@ -7,11 +15,39 @@ from src.sessionStorage import (
     update_mode_history,
     set_analysis_result
 )
+from llm.askAI import callGPT
 import uuid
 from datetime import datetime, timezone
 
 
+# ── TITLE GENERATOR ───────────────────────────────────────────────────────────
+
+def generate_session_title(first_message: str) -> str:
+    """
+    Παράγει αυτόματα τίτλο για το session βασισμένο στο πρώτο μήνυμα.
+    Καλεί το callGPT (askAI.py) και επιστρέφει max 5 λέξεις.
+    """
+    prompt = [
+        {
+            "role": "system",
+            "content": (
+                "You are a medical assistant. "
+                "Generate a very short, descriptive title (max 5 words) "
+                "for a medical chat session based on the user's first message. "
+                "The title should capture the main medical topic or symptom. "
+                "Respond ONLY with the title, no punctuation, no explanation."
+            )
+        },
+        {
+            "role": "user",
+            "content": first_message
+        }
+    ]
+    return callGPT(prompt)
+
+
 # ── GET SINGLE SESSION ────────────────────────────────────────────────────────
+
 async def get_session_route(request: Request, user: dict):
     session_id = request.query_params.get("session_id")
 
@@ -35,17 +71,18 @@ async def get_session_route(request: Request, user: dict):
             detail="Access denied"
         )
 
-    # Επιστρέφει τα metadata του session + τα μηνύματα του chat
     return {
-        "session_id":   session["session_id"],
-        "title":        session.get("title"),
-        "created_at":   session.get("created_at"),
-        "messages":     session["conversations"]["chat"]["history"],
+        "session_id":      session["session_id"],
+        "title":           session.get("title"),
+        "created_at":      session.get("created_at"),
+        "messages":        session["conversations"]["chat"]["history"],
         "analysis_result": session["conversations"]["analysis"].get("analysis_result"),
-        "file":         session["conversations"]["analysis"].get("file")
+        "file":            session["conversations"]["analysis"].get("file")
     }
 
+
 # ── GET ALL USER SESSIONS ─────────────────────────────────────────────────────
+
 async def get_user_sessions_route(request: Request, user: dict):
     user_id = user.get("sub")
 
@@ -61,10 +98,20 @@ async def get_user_sessions_route(request: Request, user: dict):
 
 
 # ── CREATE SESSION ────────────────────────────────────────────────────────────
+
 async def create_session_route(request: Request, user: dict):
+    """
+    Δημιουργεί νέο session.
+
+    Body (optional):
+      {
+        "first_message": "Έχω πονοκέφαλο και ζάλη"  ← για auto-generated title
+      }
+
+    Αν δεν δοθεί first_message, το title είναι "New Session".
+    """
     user_id = user.get("sub")
-    
-    # Χειρίσου άδειο body
+
     try:
         body = await request.json()
     except Exception:
@@ -72,23 +119,37 @@ async def create_session_route(request: Request, user: dict):
 
     session_id = str(uuid.uuid4())
 
+    # Auto-generated title από το πρώτο μήνυμα
+    first_message = body.get("first_message", "").strip()
+    title = generate_session_title(first_message) if first_message else "New Session"
+
     session_data = {
         "session_id": session_id,
-        "user_id": user_id,
-        "title": body.get("title", "New Session"),
+        "user_id":    user_id,
+        "title":      title,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "conversations": {
-            "chat": {"history": []},
-            "analysis": {"history": [], "analysis_result": None, "file": None}
+            "chat": {
+                "history": []
+            },
+            "analysis": {
+                "analysis_result": None,
+                "file":            None
+            }
         }
     }
 
     await save_session(session_id, session_data)
 
-    return {"message": "Session created", "session_id": session_id}
+    return {
+        "message":    "Session created",
+        "session_id": session_id,
+        "title":      title
+    }
 
 
 # ── DELETE SESSION ────────────────────────────────────────────────────────────
+
 async def delete_session_route(request: Request, user: dict):
     session_id = request.query_params.get("session_id")
 
@@ -106,7 +167,6 @@ async def delete_session_route(request: Request, user: dict):
             detail="Session not found"
         )
 
-    # Make sure the session belongs to the requesting user
     if session.get("user_id") != user.get("sub"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -119,12 +179,13 @@ async def delete_session_route(request: Request, user: dict):
 
 
 # ── ADD MESSAGE TO SESSION ────────────────────────────────────────────────────
+
 async def add_message_route(request: Request, user: dict):
     body = await request.json()
 
     session_id = body.get("session_id")
-    mode = body.get("mode")       # "chat" or "analysis"
-    message = body.get("message") # { "role": "user"/"assistant", "content": "..." }
+    mode       = body.get("mode")
+    message    = body.get("message")
 
     if not session_id or not mode or not message:
         raise HTTPException(
@@ -159,12 +220,13 @@ async def add_message_route(request: Request, user: dict):
 
 
 # ── SAVE ANALYSIS RESULT ──────────────────────────────────────────────────────
+
 async def save_analysis_route(request: Request, user: dict):
     body = await request.json()
 
     session_id = body.get("session_id")
-    result = body.get("result")
-    filename = body.get("filename")
+    result     = body.get("result")
+    filename   = body.get("filename")
 
     if not session_id or not result or not filename:
         raise HTTPException(
