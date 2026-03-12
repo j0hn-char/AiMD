@@ -29,15 +29,21 @@ async def get_session_route(request: Request, user: dict):
             detail="Session not found"
         )
 
-    # Make sure the session belongs to the requesting user
     if session.get("user_id") != user.get("sub"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"
         )
 
-    return session
-
+    # Επιστρέφει τα metadata του session + τα μηνύματα του chat
+    return {
+        "session_id":   session["session_id"],
+        "title":        session.get("title"),
+        "created_at":   session.get("created_at"),
+        "messages":     session["conversations"]["chat"]["history"],
+        "analysis_result": session["conversations"]["analysis"].get("analysis_result"),
+        "file":         session["conversations"]["analysis"].get("file")
+    }
 
 # ── GET ALL USER SESSIONS ─────────────────────────────────────────────────────
 async def get_user_sessions_route(request: Request, user: dict):

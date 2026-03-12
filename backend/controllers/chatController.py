@@ -99,4 +99,5 @@ async def analysis_route(request: Request, user:dict):
 
     #4 
     history = session["conversations"]["chat"]["history"]
+
     
