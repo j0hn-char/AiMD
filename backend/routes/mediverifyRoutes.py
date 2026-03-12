@@ -4,8 +4,12 @@ from controllers.authController import register, login, logout, RegisterRequest,
 from controllers.refreshController import refresh
 from controllers.sessionController import *
 from controllers.chatController import chat_route, analysis_route
+from controllers.reportController import download_report_route
 from middleware.verifyJWT import verify_jwt
 import io
+from llm.generate_final_report import generate_pdf
+from src.sessionStorage import get_session
+
 
 router = APIRouter()
 
@@ -65,28 +69,7 @@ async def analysis(
 
 @router.get("/download-report/{session_id}")
 async def download_report(session_id: str, user: dict = Depends(verify_jwt)):
-    from llm.generate_final_report import generate_pdf
-    from src.sessionStorage import get_session
-
-    session = await get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if session.get("user_id") != user.get("sub"):
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    report = session["conversations"]["analysis"].get("analysis_result", {}).get("report")
-    if not report:
-        raise HTTPException(status_code=404, detail="No report found for this session")
-
-    buffer = io.BytesIO()
-    generate_pdf(report, buffer)
-    buffer.seek(0)
-
-    return StreamingResponse(
-        buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=report_{session_id}.pdf"}
-    )
+    return await download_report_route(session_id, user)
 
 # ── HEALTH CHECK ──────────────────────────────────────────────
 @router.get("/")
