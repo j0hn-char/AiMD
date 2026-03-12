@@ -1,17 +1,16 @@
 import os
-import openai
-import json
 import re
-from concurrent.futures import ThreadPoolExecutor
+import json
+import openai
+#from typer import prompt
 from dotenv import load_dotenv
-from typer import prompt
 import google.generativeai as genai
-import os
+from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))      # Use environment variable for security
-geminiClient = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))      # Use environment variable for security
+openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))      
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))        # Use environment variable for security
 
 def callGPT(prompt):
     response = openAIclient.chat.completions.create(
@@ -20,7 +19,6 @@ def callGPT(prompt):
     )
     return response.choices[0].message.content.strip()
    
-
 
 def chatbotGemini(conversation: str) -> str:
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -38,7 +36,7 @@ def chatbotGemini(conversation: str) -> str:
     return response.text
 
 def responseComparison(conversation):
-    MAX_ATTEMPTS=3
+    MAX_ATTEMPTS=2
     prompt = (
         "You will be given two medical diagnoses produced by AI chatbots. "
         "Your task is to analyze their consistency — that is, whether they convey "
@@ -63,8 +61,11 @@ def responseComparison(conversation):
         "Include condition names, relevant pathogens, symptoms, and diagnostic methods where appropriate."
     )
     for attempt in range(1, MAX_ATTEMPTS+1):
-        response1= callGPT(conversation)
-        response2 = chatbotGemini(conversation)
+       with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(callGPT, conversation)
+        f2 = executor.submit(chatbotGemini, conversation)
+        response1 = f1.result()
+        response2 = f2.result()
 
         comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
         #rawResponse= callGPT([{"role": "user", "content": comparisonPrompt}])
@@ -96,23 +97,43 @@ def finalizeResponse(response, topPapers):
     for paper in topPapers:
         papers_text += f"[{paper['citation']}] {paper['text']}\n\n"
     
-    prompt="""You will be given a medical diagnosis and a set of excerpts from scientific papers, each accompanied by its citation.
-            Diagnosis:
-            {DIAGNOSIS}
-            Paper Excerpts:
-            {PAPERS}
-            (Each entry in PAPERS follows the format: [Citation] Excerpt text)
-            Your task is to write a cohesive, professional medical text that:
+    prompt= """You will be given a medical diagnosis and a set of excerpts from scientific papers, each accompanied by its citation.
 
-            Presents the diagnosis as the central claim.
-            Weaves in the provided paper excerpts to support, confirm, or elaborate on the diagnosis wherever relevant.
-            Places the citation immediately after each use of a paper excerpt, in inline format, e.g.: "...viral bronchitis is typically self-limiting (Smith et al., 2021)."
-            Only uses the provided excerpts — do not cite or invent any external sources.
-            If a paper excerpt does not support the diagnosis, acknowledge the discrepancy briefly rather than forcing a false confirmation.
-            Writes in a clear, clinical tone suitable for a medical report.
+    Diagnosis:
+    {DIAGNOSIS}
 
-            Respond only with the final text. Do not include any preamble, explanation, or commentary outside the medical report itself.
-        """.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
+    Paper Excerpts:
+    {PAPERS}
+    (Each entry in PAPERS follows the format: [Citation] Excerpt text)
+
+    Your task is to produce a JSON object with exactly two keys: "report" and "summary".
+
+    ---
+
+    "report" — A complete, well-structured medical report in Markdown format that:
+    - Opens with a title (e.g., # Medical Report) and a table of contents
+    - Is organized into clearly labeled sections with headings and subheadings, such as:
+    ## 1. Overview
+    ## 2. Clinical Findings
+    ## 3. Supporting Evidence
+    ### 3.1 ...
+    ## 4. Discrepancies or Limitations (if any)
+    ## 5. Conclusion
+    - Presents the diagnosis as the central claim
+    - Weaves in the provided paper excerpts to support, confirm, or elaborate on the diagnosis wherever relevant
+    - Places the citation immediately after each use of a paper excerpt in inline format, e.g.: "...viral bronchitis is typically self-limiting (Smith et al., 2021)."
+    - Only uses the provided excerpts — do not cite or invent any external sources
+    - If a paper excerpt does not support the diagnosis, acknowledges the discrepancy briefly rather than forcing a false confirmation
+    - Writes in a clear, clinical tone suitable for a formal medical report
+    - Ends with a ## References section listing all cited sources
+
+    "summary" — A concise 3–5 sentence plain-language summary of the report, suitable for display as a chatbot response to the patient or clinician. It should capture the key diagnosis, the main supporting evidence, and any notable caveats.
+
+    ---
+
+    Respond ONLY with a valid JSON object. Do not include any text, explanation, or markdown fences outside the JSON. The format must be exactly:
+    {"report": "<full markdown report here>", "summary": "<short summary here>"}
+    """.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
            
             
     final_response=callGPT([{"role": "user", "content": prompt}])
