@@ -1,5 +1,5 @@
-from AiMD.backend.file_processor import process_file
-from backend.llm.askAI import callGPT, responseComparison, finalizeResponse
+from file_processor import process_file
+from llm.askAI import callGPT, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 from llm.generate_final_report import generate_pdf
 
@@ -8,7 +8,7 @@ files = []
 
 conversation.append({"role": "system", "content": "You are a helpful and precise assistant for medical use."})
 
-userMessage = "" #Mhnhmata pou tha erxontai apo to frontend
+userMessage = "what is mediterranean anemia?" #Mhnhmata pou tha erxontai apo to frontend
 for file in files: #Ta arxeia pou tha erxontai apo to frontend
     file_response = process_file(file["contents"], file["filename"])
     if file_response["type"] == "error":
@@ -27,11 +27,14 @@ if switchIsOn:
         top_papers=get_top_papers(response)
         final_response=finalizeResponse(response["combined_diagnosis"], top_papers)
         generate_pdf(final_response["report"], "report.pdf")
+        print(final_response["summary"])
+        conversation.append({"role": "assistant", "content": response["summary"]})
     else:
         #error message   
         print("unable to get a consistant answer, error message sent to user") 
 else:
-    response=callGPT(conversation)
+    small_response=callGPT(conversation)
+    print(small_response)
+    conversation.append({"role": "assistant", "content": small_response})
 
-conversation.append({"role": "assistant", "content": response})
 

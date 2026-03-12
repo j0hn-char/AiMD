@@ -82,5 +82,6 @@ def generate_pdf(md_text, output_path):
     )
     doc.build(markdown_to_flowables(md_text))
 
-generate_pdf(report_markdown, "report.pdf")
-print(f"Summary preview: {summary[:100]}...")
+if __name__ == "__main__":
+    generate_pdf(report_markdown, "report.pdf")
+    print(f"Summary preview: {summary[:100]}...")

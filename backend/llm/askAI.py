@@ -3,14 +3,14 @@ import re
 import json
 import openai
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 from .prompts import RESPONSE_COMPARISON_PROMPT, FINALIZE_RESPONSE_PROMPT
 from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))      
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))        # Use environment variable for security
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def callGPT(prompt):
     response = openAIclient.chat.completions.create(
@@ -20,19 +20,35 @@ def callGPT(prompt):
     return response.choices[0].message.content.strip()
    
 
-def chatbotGemini(conversation: str) -> str:
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+def chatbotGemini(conversation: list) -> str:
     
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=(
-            "You are an experienced medical assistant. "
-            "Analyze the provided medical information carefully and provide "
-            "a clear, professional diagnosis with recommendations."
+    # Βρες το system message
+    system_instruction = ""
+    for msg in conversation:
+        if msg["role"] == "system":
+            system_instruction = msg["content"]
+            break
+    
+    # Μετέτρεψε τα υπόλοιπα μηνύματα σε Gemini format
+    gemini_contents = []
+    for msg in conversation:
+        if msg["role"] == "system":
+            continue
+        role = "user" if msg["role"] == "user" else "model"
+        gemini_contents.append(
+            genai.types.Content(
+                role=role,
+                parts=[genai.types.Part(text=msg["content"])]
+            )
+        )
+
+    response = gemini_client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=gemini_contents,
+        config=genai.types.GenerateContentConfig(
+            system_instruction=system_instruction
         )
     )
-    
-    response = model.generate_content(conversation)
     return response.text
 
 def responseComparison(conversation):
@@ -73,7 +89,7 @@ def finalizeResponse(response, topPapers):
     
     papers_text = ""
     for paper in topPapers:
-        papers_text += f"[{paper['citation']}] {paper['text']}\n\n"
+        papers_text += f"[{paper['citation']}] {' '.join(paper['text'])}\n\n"
     
     prompt=FINALIZE_RESPONSE_PROMPT.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
            

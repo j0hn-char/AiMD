@@ -3,7 +3,7 @@ import json
 import requests
 from dotenv import load_dotenv
 import xml.etree.ElementTree as ET
-from extract_relevant_text import get_relevant_chunks
+from .extract_relevant_text import get_relevant_chunks
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .prompts import PUBMEDSHEARH_TEST
 
