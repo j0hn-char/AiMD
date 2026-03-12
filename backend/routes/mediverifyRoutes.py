@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request, Response, File, UploadFile, Form
 from controllers.authController import register, login, logout, RegisterRequest, LoginRequest
 from controllers.refreshController import refresh
 from controllers.sessionController import *
+from controllers.chatController import chat_route,analysis_route
 from middleware.verifyJWT import verify_jwt
 
 router = APIRouter()
@@ -47,6 +48,18 @@ async def add_message(request: Request, user: dict = Depends(verify_jwt)):
 @router.post("/session/analysis")
 async def save_analysis(request: Request, user: dict = Depends(verify_jwt)):
     return await save_analysis_route(request, user)
+
+@router.post("/chat")
+async def chat(request: Request, user: dict = Depends(verify_jwt)):
+    return await chat_route(request, user)
+
+@router.post("/analysis")
+async def analysis(
+    session_id: str = Form(...),
+    file: list[UploadFile] = File(...),
+    user: dict = Depends(verify_jwt)
+):
+    return await analysis_route(user, session_id, file)
 
 # ── HEALTH CHECK ──────────────────────────────────────────────
 @router.get("/")
