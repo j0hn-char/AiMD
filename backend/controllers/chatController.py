@@ -1,4 +1,5 @@
 from fastapi import HTTPException, Request, status, UploadFile
+from fastapi.responses import PlainTextResponse
 from src.sessionStorage import get_session, update_mode_history, set_analysis_result
 from llm.askAI import callGPT, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
@@ -54,49 +55,42 @@ def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
 
 
 async def chat_route(request: Request, user: dict):
-    body = await request.json()
-    session_id = body.get("session_id")
-    user_message = body.get("message", "").strip()
+    form = await request.form()
+    session_id = form.get("session_id")
+    user_message = (form.get("message") or "").strip()
 
-    # 1
     if not session_id or not user_message:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_id and message are required"
         )
 
-    # 2
     session = await _get_authorized_session(session_id, user)
 
-    # 3
-    user_msg = {"role": "user", "content": user_message}
-    await update_mode_history(session_id, "chat", user_msg)
-
-    # 4
     history = session["conversations"]["chat"]["history"]
     conversation = _build_conversation(history, SYSTEM_CHAT)
     conversation.append({"role": "user", "content": user_message})
+
     reply = callGPT(conversation)
 
-    # 5
-    assistant_msg = {"role": "assistant", "content": reply}
-    await update_mode_history(session_id, "chat", assistant_msg)
-
-    return {"reply": reply, "mode": "chat"}
+    return PlainTextResponse(reply)
 
 
 async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
-    # 1. Validation
-    if not session_id or not files:
+    if not session_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id and at least one file are required"
+            detail="session_id is required"
         )
 
-    # 2. Authorization check
     session = await _get_authorized_session(session_id, user)
 
-    # 3. Διάβασε και επεξεργάσου τα αρχεία
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file is required"
+        )
+
     raw_files = []
     for file in files:
         contents = await file.read()
@@ -110,7 +104,6 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
             detail={"errors": processed["errors"]}
         )
 
-    # 4. Φτιάξε content parts για το LLM
     combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
     content_parts = []
 
@@ -123,16 +116,10 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
             "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}
         })
 
-    # 5. Αποθήκευσε user message στο analysis history
-    user_msg = {"role": "user", "content": combined_text or "[Image files uploaded]"}
-    await update_mode_history(session_id, "analysis", user_msg)
-
-    # 6. Φτιάξε conversation με history
     history = session["conversations"]["analysis"]["history"]
     conversation = _build_conversation(history, SYSTEM_ANALYSIS)
     conversation.append({"role": "user", "content": content_parts})
 
-    # 7. GPT + Gemini παράλληλα → σύγκριση → combined_diagnosis + pubmed_keywords
     comparison = responseComparison(conversation)
 
     if "error" in comparison:
@@ -141,10 +128,8 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
             detail=comparison["error"]
         )
 
-    # 8. PubMed αναζήτηση
     top_papers = get_top_papers(comparison)
 
-    # 9. Τελική αναφορά (Markdown report + summary)
     final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
 
     cleaned = re.sub(r"```json|```", "", final_raw).strip()
@@ -156,25 +141,15 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
             detail="Failed to parse final report"
         )
 
-    report  = final.get("report", "")
+    report = final.get("report", "")
     summary = final.get("summary", "")
 
-    # 10. Δημιούργησε PDF σε memory
     buffer = io.BytesIO()
     generate_pdf(report, buffer)
     buffer.seek(0)
     pdf_bytes = buffer.read()
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-    # 11. Αποθήκευσε ανάλυση στο analysis history
-    assistant_msg = {"role": "assistant", "content": report}
-    await update_mode_history(session_id, "analysis", assistant_msg)
-
-    # 12. Αποθήκευσε summary στο chat history για context
-    summary_msg = {"role": "assistant", "content": summary}
-    await update_mode_history(session_id, "chat", summary_msg)
-
-    # 13. Αποθήκευσε result στη βάση
     filenames = [f for _, f in raw_files]
     await set_analysis_result(
         session_id,
@@ -182,10 +157,11 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         ", ".join(filenames)
     )
 
-    return {
-        "report": report,
-        "summary": summary,
-        "pdf": pdf_base64,        # το frontend μπορεί να το κάνει download άμεσα
-        "mode": "analysis",
-        "files": filenames
-    }
+    file_meta = json.dumps({
+        "type": "file",
+        "filename": "medical_report.pdf",
+        "mimetype": "application/pdf",
+        "data": pdf_base64
+    })
+
+    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}")

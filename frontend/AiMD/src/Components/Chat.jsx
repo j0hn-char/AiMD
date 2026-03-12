@@ -66,7 +66,6 @@ export default function Chat({ chat, onUpdateMessages, token }) {
 
     await saveMessage(chat.id, "user", message, mode);
 
-    // Save title on first message
     if (chat.messages.length === 0) {
       const title = message.slice(0, 30) + (message.length > 30 ? "..." : "");
       await updateSessionTitle(chat.id, title);
@@ -76,6 +75,7 @@ export default function Chat({ chat, onUpdateMessages, token }) {
 
     try {
       const formData = new FormData();
+      formData.append("session_id", chat.id);
       formData.append("message", message);
       if (file) formData.append("file", file);
 

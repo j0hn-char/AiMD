@@ -1,11 +1,3 @@
-"""
-sessionController.py
-────────────────────
-Διαχειρίζεται τη λογική των sessions.
-Αλλαγή: το title του session παράγεται αυτόματα από το πρώτο μήνυμα
-         του χρήστη μέσω του GPT.
-"""
-
 from fastapi import HTTPException, Request, status
 from src.sessionStorage import (
     get_session,
@@ -20,13 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 
-# ── TITLE GENERATOR ───────────────────────────────────────────────────────────
-
 def generate_session_title(first_message: str) -> str:
-    """
-    Παράγει αυτόματα τίτλο για το session βασισμένο στο πρώτο μήνυμα.
-    Καλεί το callGPT (askAI.py) και επιστρέφει max 5 λέξεις.
-    """
     prompt = [
         {
             "role": "system",
@@ -45,8 +31,6 @@ def generate_session_title(first_message: str) -> str:
     ]
     return callGPT(prompt)
 
-
-# ── GET SINGLE SESSION ────────────────────────────────────────────────────────
 
 async def get_session_route(request: Request, user: dict):
     session_id = request.query_params.get("session_id")
@@ -75,13 +59,11 @@ async def get_session_route(request: Request, user: dict):
         "session_id":      session["session_id"],
         "title":           session.get("title"),
         "created_at":      session.get("created_at"),
-        "messages":        session["conversations"]["chat"]["history"],
+        "conversations":   session["conversations"],
         "analysis_result": session["conversations"]["analysis"].get("analysis_result"),
         "file":            session["conversations"]["analysis"].get("file")
     }
 
-
-# ── GET ALL USER SESSIONS ─────────────────────────────────────────────────────
 
 async def get_user_sessions_route(request: Request, user: dict):
     user_id = user.get("sub")
@@ -97,19 +79,7 @@ async def get_user_sessions_route(request: Request, user: dict):
     return {"sessions": sessions}
 
 
-# ── CREATE SESSION ────────────────────────────────────────────────────────────
-
 async def create_session_route(request: Request, user: dict):
-    """
-    Δημιουργεί νέο session.
-
-    Body (optional):
-      {
-        "first_message": "Έχω πονοκέφαλο και ζάλη"  ← για auto-generated title
-      }
-
-    Αν δεν δοθεί first_message, το title είναι "New Session".
-    """
     user_id = user.get("sub")
 
     try:
@@ -119,7 +89,6 @@ async def create_session_route(request: Request, user: dict):
 
     session_id = str(uuid.uuid4())
 
-    # Auto-generated title από το πρώτο μήνυμα
     first_message = body.get("first_message", "").strip()
     title = generate_session_title(first_message) if first_message else "New Session"
 
@@ -133,6 +102,7 @@ async def create_session_route(request: Request, user: dict):
                 "history": []
             },
             "analysis": {
+                "history":         [],
                 "analysis_result": None,
                 "file":            None
             }
@@ -147,8 +117,6 @@ async def create_session_route(request: Request, user: dict):
         "title":      title
     }
 
-
-# ── DELETE SESSION ────────────────────────────────────────────────────────────
 
 async def delete_session_route(request: Request, user: dict):
     session_id = request.query_params.get("session_id")
@@ -177,8 +145,6 @@ async def delete_session_route(request: Request, user: dict):
 
     return {"message": "Session deleted"}
 
-
-# ── ADD MESSAGE TO SESSION ────────────────────────────────────────────────────
 
 async def add_message_route(request: Request, user: dict):
     body = await request.json()
@@ -218,8 +184,6 @@ async def add_message_route(request: Request, user: dict):
 
     return {"message": "Message added"}
 
-
-# ── SAVE ANALYSIS RESULT ──────────────────────────────────────────────────────
 
 async def save_analysis_route(request: Request, user: dict):
     body = await request.json()
