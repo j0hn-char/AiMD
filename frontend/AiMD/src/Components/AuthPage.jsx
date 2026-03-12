@@ -32,11 +32,11 @@ export default function AuthPage({ onLogin }) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.message || "Something went wrong.");
+        setError(data.detail || data.message || "Something went wrong.");
         return;
       }
 
-      onLogin(data.token);
+      onLogin(data.access_token);
     } catch (err) {
       setError("Could not connect to server.");
     } finally {
@@ -52,10 +52,13 @@ export default function AuthPage({ onLogin }) {
     <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950
       flex flex-col items-center justify-center p-4 gap-8">
 
-      <h1 className="text-6xl sm:text-7xl font-light bg-gradient-to-r
-        from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center">
-        AiMD
-      </h1>
+      <div className="flex items-center justify-center">
+        <img src="/logo.svg" className="w-32 h-32" />
+        <h1 className="text-6xl sm:text-7xl font-light bg-gradient-to-r
+         from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center">
+          AiMD
+        </h1>
+      </div>
 
       <div className="w-full max-w-md bg-gradient-to-r from-gray-800/90 to-gray-700/90
         backdrop-blur-md border border-gray-600 rounded-3xl p-8 shadow-2xl flex flex-col gap-6">
@@ -83,6 +86,8 @@ export default function AuthPage({ onLogin }) {
         <div className="flex flex-col gap-3">
           <input
             type="email"
+            id="email"
+            name="email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -93,6 +98,8 @@ export default function AuthPage({ onLogin }) {
           />
           <input
             type="password"
+            id="password"
+            name="password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -104,6 +111,8 @@ export default function AuthPage({ onLogin }) {
           {!isLogin && (
             <input
               type="password"
+              id="confirmPassword"
+              name="confirmPassword"
               placeholder="Confirm Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

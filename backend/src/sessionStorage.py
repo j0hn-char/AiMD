@@ -1,4 +1,4 @@
-from backend.src.database import sessions_collection
+from src.database import sessions_collection
 from datetime import datetime, timezone
 
 

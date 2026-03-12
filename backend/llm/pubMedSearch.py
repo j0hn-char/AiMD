@@ -3,6 +3,7 @@ import requests
 import xml.etree.ElementTree as ET
 import time
 from extract_relevant_text import get_relevant_chunks
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 #configuration
 ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -198,35 +199,35 @@ def get_top_papers(ai_diagnosis) -> list[dict]:
         return []
 
     print(f"{len(pmids)} articles were found. Checking open access...\n")
-    time.sleep(0.4)
 
     articles = fetch_metadata(pmids)
 
-    papers = []
-    for article in articles:
+    def fetch_article(article):
         pmcid = article["pmcid"]
-
         if not pmcid:
             print(f" [{article['pmid']}] {article['title'][:60]}… — closed access, dismiss")
-            continue
-
+            return None
+        
         print(f" [{article['pmid']}] {article['title'][:60]}… — fetching...")
-        time.sleep(0.4)   # rate limit
-
         full_text = fetch_full_text(pmcid)
         if not full_text:
-            continue 
-        
-        papers.append({
-            "url":       article["url"],
-            "title":     article["title"],
-            "citation":  build_apa_citation(article),
-            "text": full_text,
-        })
+            return None
+        return {
+            "url":      article["url"],
+            "title":    article["title"],
+            "citation": build_apa_citation(article),
+            "text":     full_text,
+        }
 
-    results = get_relevant_chunks(ai_diagnosis["combined_diagnosis"], papers)    
-    print(f"\n{len(results)} articles with full access out of {len(pmids)} in total.\n")
-    return results
+    papers = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(fetch_article, a): a for a in articles}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                papers.append(result)
+
+    return get_relevant_chunks(ai_diagnosis["combined_diagnosis"], papers)
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 

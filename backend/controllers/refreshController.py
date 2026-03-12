@@ -1,7 +1,8 @@
 from fastapi import HTTPException, Request, Response
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
-from backend.src.database import users_collection
+from src.database import users_collection
+from bson import ObjectId
 import os
 from dotenv import load_dotenv
 
@@ -14,23 +15,23 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 async def refresh(request: Request, response: Response):
     try:
-        # Πάρε το refresh token από τα cookies
         refresh_token = request.cookies.get("refresh_token")
         if not refresh_token:
             raise HTTPException(status_code=401, detail="No refresh token provided")
 
-        # Decode το refresh token
         try:
             decoded = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         except JWTError:
             raise HTTPException(status_code=403, detail="Invalid or expired refresh token")
 
-        # Βρες τον user στη MongoDB
-        user = await users_collection.find_one({"_id": decoded.get("sub")})
+        try:
+            user = await users_collection.find_one({"_id": ObjectId(decoded.get("sub"))})
+        except Exception:
+            raise HTTPException(status_code=403, detail="Invalid user ID")
+
         if not user:
             raise HTTPException(status_code=403, detail="User not found")
 
-        # Φτιάξε νέο access token
         access_token = jwt.encode(
             {
                 "sub": str(user["_id"]),
@@ -40,7 +41,6 @@ async def refresh(request: Request, response: Response):
             algorithm=ALGORITHM
         )
 
-        # Βάλε το νέο access token στο cookie
         response.set_cookie(
             key="access_token",
             value=access_token,

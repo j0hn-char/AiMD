@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Request, Response
-from backend.controllers.authController import register, login, logout, RegisterRequest, LoginRequest
-from backend.controllers.refreshController import refresh
-from backend.controllers.sessionController import *
-from backend.middleware.verifyJWT import verify_jwt
+from controllers.authController import register, login, logout, RegisterRequest, LoginRequest
+from controllers.refreshController import refresh
+from controllers.sessionController import *
+from middleware.verifyJWT import verify_jwt
 
 router = APIRouter()
 

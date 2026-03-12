@@ -1,14 +1,26 @@
 from fastapi import FastAPI
-from backend.routes.mediverifyRoutes import router
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer
+from routes.mediverifyRoutes import router
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
-# Make sure docs are enabled
 medical = FastAPI(
     title="MediVerify API",
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-medical.include_router(router)
+security = HTTPBearer()
+
+medical.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+medical.include_router(router, prefix="/api")
