@@ -3,6 +3,11 @@ from src.sessionStorage import get_session, update_mode_history, set_analysis_re
 from llm.askAI import callGPT, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 from file_processor import process_files
+from llm.generate_final_report import generate_pdf
+import json
+import re
+import io
+import base64
 
 SYSTEM_CHAT = {
     "role": "system",
@@ -81,17 +86,17 @@ async def chat_route(request: Request, user: dict):
 
 
 async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
-    # 1
+    # 1. Validation
     if not session_id or not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_id and at least one file are required"
         )
 
-    # 2
+    # 2. Authorization check
     session = await _get_authorized_session(session_id, user)
 
-    # 3. Διάβασε όλα τα αρχεία και πέρασέ τα στο process_files
+    # 3. Διάβασε και επεξεργάσου τα αρχεία
     raw_files = []
     for file in files:
         contents = await file.read()
@@ -99,23 +104,14 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     processed = process_files(raw_files)
 
-    # 4. Αν υπάρχουν errors, επέστρεψέ τα
     if processed["errors"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"errors": processed["errors"]}
         )
 
-    # 5. Αποθήκευσε user message στο analysis history
+    # 4. Φτιάξε content parts για το LLM
     combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
-    user_msg = {"role": "user", "content": combined_text or "[Image files uploaded]"}
-    await update_mode_history(session_id, "analysis", user_msg)
-
-    # 6. Φτιάξε conversation για το LLM
-    history = session["conversations"]["analysis"]["history"]
-    conversation = _build_conversation(history, SYSTEM_ANALYSIS)
-
-    # 7. Πρόσθεσε texts + images στο τελευταίο message
     content_parts = []
 
     if combined_text:
@@ -124,52 +120,72 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     for img in processed["images"]:
         content_parts.append({
             "type": "image_url",
-            "image_url": {
-                "url": f"data:{img['media_type']};base64,{img['data']}"
-            }
+            "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}
         })
 
+    # 5. Αποθήκευσε user message στο analysis history
+    user_msg = {"role": "user", "content": combined_text or "[Image files uploaded]"}
+    await update_mode_history(session_id, "analysis", user_msg)
+
+    # 6. Φτιάξε conversation με history
+    history = session["conversations"]["analysis"]["history"]
+    conversation = _build_conversation(history, SYSTEM_ANALYSIS)
     conversation.append({"role": "user", "content": content_parts})
 
-    # 8. Κάλεσε το LLM για ανάλυση
-    reply = callGPT(conversation)
+    # 7. GPT + Gemini παράλληλα → σύγκριση → combined_diagnosis + pubmed_keywords
+    comparison = responseComparison(conversation)
 
-    # 9. Φτιάξε σύντομη περίληψη για τον χρήστη
-    summary_conversation = [
-        {
-            "role": "system",
-            "content": (
-                "You are a medical assistant. Given the following medical analysis, "
-                "write a short, friendly, and clear summary (3-5 sentences) for the patient. "
-                "Avoid technical jargon. Focus on the key findings and next steps."
-            )
-        },
-        {
-            "role": "user",
-            "content": f"Here is the medical analysis:\n\n{reply}\n\nPlease summarize it for the patient."
-        }
-    ]
-    summary = callGPT(summary_conversation)
+    if "error" in comparison:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=comparison["error"]
+        )
 
-    # 10. Αποθήκευσε την πλήρη ανάλυση στο analysis history
-    assistant_msg = {"role": "assistant", "content": reply}
+    # 8. PubMed αναζήτηση
+    top_papers = get_top_papers(comparison)
+
+    # 9. Τελική αναφορά (Markdown report + summary)
+    final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
+
+    cleaned = re.sub(r"```json|```", "", final_raw).strip()
+    try:
+        final = json.loads(cleaned)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to parse final report"
+        )
+
+    report  = final.get("report", "")
+    summary = final.get("summary", "")
+
+    # 10. Δημιούργησε PDF σε memory
+    buffer = io.BytesIO()
+    generate_pdf(report, buffer)
+    buffer.seek(0)
+    pdf_bytes = buffer.read()
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+    # 11. Αποθήκευσε ανάλυση στο analysis history
+    assistant_msg = {"role": "assistant", "content": report}
     await update_mode_history(session_id, "analysis", assistant_msg)
 
-    # 11. Αποθήκευσε το summary στο chat history για context
+    # 12. Αποθήκευσε summary στο chat history για context
     summary_msg = {"role": "assistant", "content": summary}
     await update_mode_history(session_id, "chat", summary_msg)
 
-    # 12. Αποθήκευσε result + summary στη βάση
+    # 13. Αποθήκευσε result στη βάση
     filenames = [f for _, f in raw_files]
     await set_analysis_result(
         session_id,
-        {"result": reply, "summary": summary},
+        {"report": report, "summary": summary},
         ", ".join(filenames)
     )
 
     return {
-        "reply": reply,
+        "report": report,
         "summary": summary,
+        "pdf": pdf_base64,        # το frontend μπορεί να το κάνει download άμεσα
         "mode": "analysis",
         "files": filenames
     }

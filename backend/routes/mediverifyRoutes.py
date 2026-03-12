@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Depends, Request, Response, File, UploadFile, Form
+from fastapi.responses import StreamingResponse
 from controllers.authController import register, login, logout, RegisterRequest, LoginRequest
 from controllers.refreshController import refresh
 from controllers.sessionController import *
-from controllers.chatController import chat_route,analysis_route
+from controllers.chatController import chat_route, analysis_route
+from controllers.reportController import download_report_route
 from middleware.verifyJWT import verify_jwt
+import io
+from llm.generate_final_report import generate_pdf
+from src.sessionStorage import get_session
+
 
 router = APIRouter()
 
@@ -56,10 +62,14 @@ async def chat(request: Request, user: dict = Depends(verify_jwt)):
 @router.post("/analysis")
 async def analysis(
     session_id: str = Form(...),
-    file: list[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     user: dict = Depends(verify_jwt)
 ):
-    return await analysis_route(user, session_id, file)
+    return await analysis_route(user, session_id, files)
+
+@router.get("/download-report/{session_id}")
+async def download_report(session_id: str, user: dict = Depends(verify_jwt)):
+    return await download_report_route(session_id, user)
 
 # ── HEALTH CHECK ──────────────────────────────────────────────
 @router.get("/")

@@ -17,43 +17,97 @@ function App() {
     fetchChats();
   }, [token]);
 
+  useEffect(() => {
+    if (!activeChatId || !token) return;
+    loadSessionMessages(activeChatId);
+  }, [activeChatId]);
+
+  const authHeaders = () => ({
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  });
+
   const fetchChats = async () => {
     setIsLoadingChats(true);
     try {
-      const res = await fetch("/api/chats", {
-        headers: { "Authorization": `Bearer ${token}` },
-      });
+      const res = await fetch("/api/sessions", { headers: authHeaders() });
       const data = await res.json();
 
-      if (data.chats && data.chats.length > 0) {
-        setChats(data.chats);
-        setActiveChatId(data.chats[0].id);
+      if (data.sessions && data.sessions.length > 0) {
+        const mapped = data.sessions.map((s) => ({
+          id: s.session_id,
+          title: s.title || "New Chat",
+          messages: [],
+        }));
+        setChats(mapped);
+        setActiveChatId(mapped[0].id);
       } else {
-        const newChat = { id: Date.now(), title: "New Chat", messages: [] };
-        setChats([newChat]);
-        setActiveChatId(newChat.id);
+        await createNewChat();
       }
     } catch (err) {
-      const newChat = { id: Date.now(), title: "New Chat", messages: [] };
-      setChats([newChat]);
-      setActiveChatId(newChat.id);
+      await createNewChat();
     } finally {
       setIsLoadingChats(false);
     }
   };
 
-  const createNewChat = () => {
-    const newChat = { id: Date.now(), title: "New Chat", messages: [] };
-    setChats((prev) => [newChat, ...prev]);
-    setActiveChatId(newChat.id);
+  const loadSessionMessages = async (sessionId) => {
+    try {
+      const res = await fetch(`/api/session?session_id=${sessionId}`, {
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      const history = data?.conversations?.chat?.history || [];
+      const messages = history.map((m, i) => ({
+        id: i,
+        content: m.content,
+        isUser: m.role === "user",
+        file: null,
+      }));
+      setChats((prev) =>
+        prev.map((c) => c.id === sessionId ? { ...c, messages } : c)
+      );
+    } catch (err) {
+      console.error("Failed to load messages", err);
+    }
   };
 
-  const deleteChat = (id) => {
-    const remaining = chats.filter((c) => c.id !== id);
-    if (remaining.length === 0) {
-      const newChat = { id: Date.now(), title: "New Chat", messages: [] };
-      setChats([newChat]);
+  const createNewChat = async () => {
+    try {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ title: "New Chat" }),
+      });
+      const data = await res.json();
+      const newChat = { id: data.session_id, title: "New Chat", messages: [] };
+      setChats((prev) => [newChat, ...prev]);
       setActiveChatId(newChat.id);
+      return newChat.id;
+    } catch (err) {
+      const newChat = { id: Date.now().toString(), title: "New Chat", messages: [] };
+      setChats((prev) => [newChat, ...prev]);
+      setActiveChatId(newChat.id);
+      return newChat.id;
+    }
+  };
+
+  const deleteChat = async (id) => {
+    try {
+      await fetch(`/api/session?session_id=${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+    } catch (err) {
+      console.error("Failed to delete session", err);
+    }
+
+    const remaining = chats.filter((c) => c.id !== id);
+
+    if (remaining.length === 0) {
+      setChats([]);
+      setActiveChatId(null);
+      await createNewChat();
     } else {
       setChats(remaining);
       if (activeChatId === id) setActiveChatId(remaining[0].id);
