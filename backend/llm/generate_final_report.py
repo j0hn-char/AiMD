@@ -13,6 +13,7 @@ report_markdown = GENERATE_FINAL_REPORT_TEST1
 
 summary = GENERATE_FINAL_REPORT_TEST2
 
+
 def convert_inline(text):
     text = text.replace('&', '&amp;')
     text = re.sub(r'\*\*\*(.*?)\*\*\*', r'<b>\1</b>', text)
@@ -73,9 +74,13 @@ def markdown_to_flowables(md_text):
     return flowables
 
 def generate_pdf(md_text, output_path):
-    doc = SimpleDocTemplate(output_path, pagesize=A4,
-                            rightMargin=2*cm, leftMargin=2*cm,
-                            topMargin=2.5*cm, bottomMargin=2*cm)
+    doc = SimpleDocTemplate(
+        output_path,  # δέχεται είτε path string είτε BytesIO object
+        pagesize=A4,
+        rightMargin=2*cm, leftMargin=2*cm,
+        topMargin=2.5*cm, bottomMargin=2*cm
+    )
     doc.build(markdown_to_flowables(md_text))
-    print(f"PDF saved: {output_path}")
 
+generate_pdf(report_markdown, "report.pdf")
+print(f"Summary preview: {summary[:100]}...")
