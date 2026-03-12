@@ -5,14 +5,13 @@ import Chat from "./Components/Chat";
 import AuthPage from "./Components/AuthPage";
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem("token") || "dev-token");
+  const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
 
-  // Fetch chats whenever token changes (on login)
   useEffect(() => {
     if (!token) return;
     fetchChats();
@@ -35,7 +34,6 @@ function App() {
         setActiveChatId(newChat.id);
       }
     } catch (err) {
-      // Fallback for dev mode
       const newChat = { id: Date.now(), title: "New Chat", messages: [] };
       setChats([newChat]);
       setActiveChatId(newChat.id);
