@@ -33,7 +33,11 @@ if switchIsOn:
         #error message   
         print("unable to get a consistant answer, error message sent to user") 
 else:
-    small_response=callGPT(conversation)
+    short_conversation = conversation + [{
+        "role": "user",
+        "content": "Answer briefly and in a friendly, simple way. No technical jargon, no long explanations."
+    }]
+    small_response = callGPT(short_conversation, 0.2)
     print(small_response)
     conversation.append({"role": "assistant", "content": small_response})
 
