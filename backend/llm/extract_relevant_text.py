@@ -2,7 +2,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-THRESHOLD = 0.1
+THRESHOLD = 0.2
 
 def split_into_chunks(text, chunk_size=300, overlap=50):
     words = text.split()

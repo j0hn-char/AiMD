@@ -32,7 +32,7 @@ def responseComparison(conversation):
             response1 = f1.result()
             response2 = f2.result()
 
-        comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
+        comparisonPrompt = prompt.replace("{RESPONSE_1}", response1).replace("{RESPONSE_2}", response2)
 
         result = {
             "consistent": False,
@@ -60,9 +60,11 @@ def responseComparison(conversation):
 def finalizeResponse(response, topPapers):
     papers_text = ""
     for paper in topPapers:
-        papers_text += f"[{paper['citation']}] {' '.join(paper['text'])}\n\n"
+        chunks = "\n\n".join(paper['text'])
+        papers_text += f"[{paper['citation']}]\n\n{chunks}\n\n"
 
     prompt = FINALIZE_RESPONSE_PROMPT.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
 
-    final_response = callGPT([{"role": "user", "content": prompt}], 0.2)
-    return final_response
+    raw = callGPT([{"role": "user", "content": prompt}], 0.2)
+    cleaned = re.sub(r"```json|```", "", raw).strip()
+    return json.loads(cleaned) 
