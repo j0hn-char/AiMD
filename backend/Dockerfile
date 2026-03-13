@@ -2,7 +2,7 @@
 FROM python:3.11
 
 # Install DejaVu fonts required by reportlab
-RUN apt-get update && apt-get install -y fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y fonts-dejavu fonts-dejavu-extra && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory inside the container
 WORKDIR /app

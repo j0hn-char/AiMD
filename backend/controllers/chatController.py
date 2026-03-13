@@ -85,18 +85,13 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     session = await _get_authorized_session(session_id, user)
 
-    if not files:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one file is required"
-        )
-
     raw_files = []
-    for file in files:
-        contents = await file.read()
-        raw_files.append((contents, file.filename))
+    if files:
+        for file in files:
+            contents = await file.read()
+            raw_files.append((contents, file.filename))
 
-    processed = process_files(raw_files)
+    processed = process_files(raw_files) if raw_files else {"texts": [], "images": [], "errors": []}
 
     if processed["errors"]:
         raise HTTPException(
@@ -118,7 +113,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     history = session["conversations"]["analysis"]["history"]
     conversation = _build_conversation(history, SYSTEM_ANALYSIS)
-    conversation.append({"role": "user", "content": content_parts})
+    conversation.append({"role": "user", "content": content_parts if content_parts else "No files provided. Please analyze based on conversation history."})
 
     comparison = responseComparison(conversation)
 
@@ -129,6 +124,9 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         )
 
     top_papers = get_top_papers(comparison)
+
+    if not top_papers:
+        print("No relevant open access papers found. Proceeding without references.")
 
     final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
 

@@ -15,7 +15,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EMAIL = os.getenv("EMAIL")
 NCBI_API_KEY = os.getenv("NCBI_API_KEY")  # προαιρετικό, ανεβάζει rate limit σε 10 req/sec
-FETCH_LIMIT = 10  # μειώθηκε από 20 για να αποφύγουμε timeouts
+FETCH_LIMIT = 15  # μειώθηκε από 20 για να αποφύγουμε timeouts
  
  
 def make_session() -> requests.Session:
@@ -250,6 +250,10 @@ def get_top_papers(ai_diagnosis):
             if result:
                 papers.append(result)
  
+    if not papers:
+        print("No open access articles found. Skipping relevance ranking.")
+        return []
+
     return get_relevant_chunks(ai_diagnosis["combined_diagnosis"], papers)
  
 # ── Entry point ────────────────────────────────────────────────────────────────
