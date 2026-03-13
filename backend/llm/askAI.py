@@ -2,10 +2,11 @@ import os
 import re
 import json
 import openai
-from dotenv import load_dotenv
 from google import genai
-from .prompts import RESPONSE_COMPARISON_PROMPT, FINALIZE_RESPONSE_PROMPT
+from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
+from .prompts import RESPONSE_COMPARISON_PROMPT, FINALIZE_RESPONSE_PROMPT
+
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
