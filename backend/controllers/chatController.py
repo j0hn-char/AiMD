@@ -149,11 +149,16 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
     filenames = [f for _, f in raw_files]
+    filename = ", ".join(filenames) if filenames else "medical_report.pdf"
     await set_analysis_result(
-        session_id,
-        {"report": report, "summary": summary},
-        ", ".join(filenames)
-    )
+    session_id,
+    {
+        "report": report,
+        "summary": summary,
+        "pdf": pdf_base64  # ← αποθήκευσε το PDF
+    },
+    filename  # ← πάντα έχει τιμή
+)
 
     file_meta = json.dumps({
         "type": "file",

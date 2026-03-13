@@ -57,15 +57,40 @@ function App() {
         headers: authHeaders(),
       });
       const data = await res.json();
-      const history = data?.conversations?.chat?.history || [];
-      const messages = history.map((m, i) => ({
-        id: i,
+
+      const chatHistory = data?.conversations?.chat?.history || [];
+      const analysisHistory = data?.conversations?.analysis?.history || [];
+      const analysisPdf = data?.conversations?.analysis?.analysis_result?.pdf || null;
+
+      const chatMessages = chatHistory.map((m, i) => ({
+        id: `chat-${i}`,
         content: m.content,
         isUser: m.role === "user",
         file: null,
+        mode: "chat",
+        timestamp: m.timestamp || ""
       }));
+
+      const analysisMessages = analysisHistory.map((m, i) => ({
+        id: `analysis-${i}`,
+        content: m.content,
+        isUser: m.role === "user",
+        file: m.role === "assistant" && analysisPdf ? {
+          type: "file",
+          filename: "medical_report.pdf",
+          mimetype: "application/pdf",
+          data: analysisPdf
+        } : null,
+        mode: "analysis",
+        timestamp: m.timestamp || ""
+      }));
+
+      const allMessages = [...chatMessages, ...analysisMessages].sort((a, b) => {
+        return new Date(a.timestamp) - new Date(b.timestamp);
+      });
+
       setChats((prev) =>
-        prev.map((c) => c.id === sessionId ? { ...c, messages } : c)
+        prev.map((c) => c.id === sessionId ? { ...c, messages: allMessages } : c)
       );
     } catch (err) {
       console.error("Failed to load messages", err);

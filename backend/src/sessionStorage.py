@@ -52,19 +52,13 @@ async def update_mode_history(session_id: str, mode: str, new_message: dict) -> 
 
 # ── SAVE ANALYSIS RESULT ──────────────────────────────────────────────────────
 async def set_analysis_result(session_id: str, result: dict, filename: str) -> None:
-    """
-    Saves the analysis result and file metadata to the session.
-    result: the analysis output dict
-    filename: name of the uploaded file
-    """
     update_fields = {
         "conversations.analysis.analysis_result": result,
-    }
-    if filename:
-        update_fields["conversations.analysis.file"] = {
+        "conversations.analysis.file": {
             "filename": filename,
             "uploaded_at": datetime.now(timezone.utc).isoformat()
         }
+    }
 
     await sessions_collection.update_one(
         {"session_id": session_id},
