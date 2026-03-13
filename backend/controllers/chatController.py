@@ -125,19 +125,19 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     top_papers = get_top_papers(comparison)
 
-    if not top_papers:
-        print("No relevant open access papers found. Proceeding without references.")
-
     final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
 
-    cleaned = re.sub(r"```json|```", "", final_raw).strip()
-    try:
-        final = json.loads(cleaned)
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to parse final report"
-        )
+    if isinstance(final_raw, dict):
+        final = final_raw
+    else:
+        cleaned = re.sub(r"```json|```", "", final_raw).strip()
+        try:
+            final = json.loads(cleaned)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to parse final report"
+            )
 
     report = final.get("report", "")
     summary = final.get("summary", "")

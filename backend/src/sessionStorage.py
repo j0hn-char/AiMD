@@ -57,11 +57,16 @@ async def set_analysis_result(session_id: str, result: dict, filename: str) -> N
     result: the analysis output dict
     filename: name of the uploaded file
     """
+    update_fields = {
+        "conversations.analysis.analysis_result": result,
+    }
+    if filename:
+        update_fields["conversations.analysis.file"] = {
+            "filename": filename,
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
+        }
+
     await sessions_collection.update_one(
         {"session_id": session_id},
-        {"$set": {
-            "conversations.analysis.analysis_result": result,
-            "conversations.analysis.file.filename": filename,
-            "conversations.analysis.file.uploaded_at": datetime.now(timezone.utc).isoformat()
-        }}
+        {"$set": update_fields}
     )
