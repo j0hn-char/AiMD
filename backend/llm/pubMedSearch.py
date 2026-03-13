@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 import xml.etree.ElementTree as ET
 from .extract_relevant_text import get_relevant_chunks
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .prompts import PUBMEDSHEARH_TEST
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
@@ -237,8 +236,9 @@ def get_top_papers(ai_diagnosis) -> list[dict]:
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-   
-    ai_diagnosis = PUBMEDSHEARH_TEST
+    from .prompts import PUBMEDSEARCH_TEST
+
+    ai_diagnosis = PUBMEDSEARCH_TEST
     
     papers = get_top_papers(ai_diagnosis)
 # Printing as JSON

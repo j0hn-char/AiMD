@@ -164,7 +164,7 @@ GENERATE_FINAL_REPORT_TEST2=("The patient's symptoms and test results are consis
            "right lower lobe consolidation on chest X-ray, and a very high CRP level. The Pneumonia "
            "Severity Index places the patient in Risk Class III, indicating moderate severity.")
     
-PUBMEDSHEARH_TEST= {
+PUBMEDSEARCH_TEST= {
         "consistent": True,
         "combined_diagnosis": "The patient presents with headache, productive cough, and low-grade fever (approximately 37.1–37.9°C), a symptom cluster most consistent with an acute respiratory tract infection, most likely of viral etiology. The differential diagnosis includes acute viral bronchitis and viral upper respiratory infection (common cold) as the leading possibilities. Other potential causes include influenza, COVID-19 infection, early or mild community-acquired pneumonia if symptoms worsen or sputum becomes purulent, and acute sinusitis with post-nasal drip contributing to cough and headache. Recommended evaluation includes monitoring vital signs (temperature, respiratory rate, and oxygen saturation), performing lung auscultation, and assessing sputum characteristics. Diagnostic testing such as COVID-19 or influenza testing may be appropriate, with additional laboratory studies (e.g., CBC, CRP) and chest radiography considered if bacterial infection or pneumonia is suspected. Medical evaluation is recommended if symptoms persist for several days, worsen, or are accompanied by high fever, shortness of breath, chest pain, or significant fatigue.",
         "pubmed_keywords": [
