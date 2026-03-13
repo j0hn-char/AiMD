@@ -71,7 +71,7 @@ async def chat_route(request: Request, user: dict):
     conversation = _build_conversation(history, SYSTEM_CHAT)
     conversation.append({"role": "user", "content": user_message})
 
-    reply = callGPT(conversation)
+    reply = callGPT(conversation, 0.2)
 
     return PlainTextResponse(reply)
 
