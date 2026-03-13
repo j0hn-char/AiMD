@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Plasma from './Plasma';
 
 export default function AuthPage({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -49,98 +50,173 @@ export default function AuthPage({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950
-      flex flex-col items-center justify-center p-4 gap-8">
-
-      <div className="flex items-center justify-center">
-        <img src="/logo.svg" className="w-32 h-32" />
-        <h1 className="text-6xl sm:text-7xl font-light bg-gradient-to-r
-         from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center">
-          AiMD
-        </h1>
+    <div
+      className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950 flex flex-col items-center justify-center p-4 gap-8"
+      style={{ position: 'relative' }}
+    >
+      {/* <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+        <Plasma color="#075985" speed={0.6} direction="forward" scale={1.1} opacity={0.5} mouseInteractive={true} />
+      </div> */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+        <Plasma color="#0e7490" speed={0.5} direction="alternate" scale={1.4} opacity={0.5} mouseInteractive={false} />
       </div>
+      {/* <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+        <Plasma color="#0f766e" speed={0.4} direction="reverse" scale={1.7} opacity={0.35} mouseInteractive={true} />
+      </div> */}
 
-      <div className="w-full max-w-md bg-gradient-to-r from-gray-800/90 to-gray-700/90
-        backdrop-blur-md border border-gray-600 rounded-3xl p-8 shadow-2xl flex flex-col gap-6">
+      {/* Content */}
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', width: '100%' }}>
 
-        {/* Toggle */}
-        <div className="relative flex items-center bg-gray-900/60 border border-gray-600 rounded-2xl p-1">
-          <div className={`absolute inset-y-1 w-[calc(50%-4px)] rounded-xl transition-all duration-300
-            ${isLogin
-              ? "left-1 bg-gradient-to-r from-sky-500 to-cyan-500"
-              : "left-[calc(50%+3px)] bg-gradient-to-r from-violet-500 to-purple-600"}`}
-          />
-          <button onClick={() => { setIsLogin(true); setError(null); }}
-            className={`relative z-10 w-1/2 py-2 rounded-xl text-sm font-semibold transition-colors duration-200
-              ${isLogin ? "text-white" : "text-gray-400 hover:text-white"}`}>
-            Login
-          </button>
-          <button onClick={() => { setIsLogin(false); setError(null); }}
-            className={`relative z-10 w-1/2 py-2 rounded-xl text-sm font-semibold transition-colors duration-200
-              ${!isLogin ? "text-white" : "text-gray-400 hover:text-white"}`}>
-            Register
-          </button>
+        {/* Logo + Title */}
+        <div className="flex items-center justify-center gap-2">
+          <img src="/logo.svg" className="w-20 h-20 drop-shadow-lg" />
+          <h1
+            className="text-6xl sm:text-7xl bg-gradient-to-r from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent"
+            style={{ filter: 'drop-shadow(0 0 24px rgba(34,211,238,0.35))' }}
+          >
+            AiMD
+          </h1>
         </div>
 
-        {/* Fields */}
-        <div className="flex flex-col gap-3">
-          <input
-            type="email"
-            id="email"
-            name="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={handleKeyPress}
-            className="px-4 py-3 bg-gray-700/80 border border-gray-600 rounded-2xl
-              text-white placeholder-gray-400 focus:outline-none focus:ring-2
-              focus:ring-sky-500 transition duration-300"
-          />
-          <input
-            type="password"
-            id="password"
-            name="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={handleKeyPress}
-            className="px-4 py-3 bg-gray-700/80 border border-gray-600 rounded-2xl
-              text-white placeholder-gray-400 focus:outline-none focus:ring-2
-              focus:ring-sky-500 transition duration-300"
-          />
-          {!isLogin && (
+        {/* Card */}
+        <div
+          className="w-full max-w-md rounded-3xl p-8 flex flex-col gap-6"
+          style={{
+            background: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+          }}
+        >
+          {/* Toggle */}
+          <div
+            className="relative flex items-center p-1 rounded-2xl"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            <div
+              className={`absolute inset-y-1 w-[calc(50%-4px)] rounded-xl transition-all duration-300 ${
+                isLogin
+                  ? "left-1 bg-gradient-to-r from-sky-500/80 to-cyan-500/80"
+                  : "left-[calc(50%+3px)] bg-gradient-to-r from-violet-500/80 to-purple-600/80"
+              }`}
+              style={{ backdropFilter: 'blur(8px)', boxShadow: '0 2px 12px rgba(0,0,0,0.3)' }}
+            />
+            <button
+              onClick={() => { setIsLogin(true); setError(null); }}
+              className={`relative z-10 w-1/2 py-2 rounded-xl text-sm font-semibold transition-colors duration-200
+                ${isLogin ? "text-white" : "text-white/50 hover:text-white/80"}`}
+            >
+              Login
+            </button>
+            <button
+              onClick={() => { setIsLogin(false); setError(null); }}
+              className={`relative z-10 w-1/2 py-2 rounded-xl text-sm font-semibold transition-colors duration-200
+                ${!isLogin ? "text-white" : "text-white/50 hover:text-white/80"}`}
+            >
+              Register
+            </button>
+          </div>
+
+          {/* Fields */}
+          <div className="flex flex-col gap-3">
+            <input
+              type="email"
+              id="email"
+              name="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={handleKeyPress}
+              className="px-4 py-3 rounded-2xl text-white placeholder-white/40 focus:outline-none transition duration-300"
+              style={{
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                backdropFilter: 'blur(8px)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+              }}
+              onFocus={e => e.target.style.border = '1px solid rgba(34,211,238,0.5)'}
+              onBlur={e => e.target.style.border = '1px solid rgba(255,255,255,0.12)'}
+            />
             <input
               type="password"
-              id="confirmPassword"
-              name="confirmPassword"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              id="password"
+              name="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               onKeyDown={handleKeyPress}
-              className="px-4 py-3 bg-gray-700/80 border border-gray-600 rounded-2xl
-                text-white placeholder-gray-400 focus:outline-none focus:ring-2
-                focus:ring-sky-500 transition duration-300"
+              className="px-4 py-3 rounded-2xl text-white placeholder-white/40 focus:outline-none transition duration-300"
+              style={{
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                backdropFilter: 'blur(8px)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+              }}
+              onFocus={e => e.target.style.border = '1px solid rgba(34,211,238,0.5)'}
+              onBlur={e => e.target.style.border = '1px solid rgba(255,255,255,0.12)'}
             />
-          )}
-        </div>
-
-        {error && (
-          <div className="text-red-400 text-sm text-center bg-red-400/10 border border-red-400/30
-            rounded-xl px-4 py-2">
-            {error}
+            {!isLogin && (
+              <input
+                type="password"
+                id="confirmPassword"
+                name="confirmPassword"
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={handleKeyPress}
+                className="px-4 py-3 rounded-2xl text-white placeholder-white/40 focus:outline-none transition duration-300"
+                style={{
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  backdropFilter: 'blur(8px)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+                }}
+                onFocus={e => e.target.style.border = '1px solid rgba(34,211,238,0.5)'}
+                onBlur={e => e.target.style.border = '1px solid rgba(255,255,255,0.12)'}
+              />
+            )}
           </div>
-        )}
 
-        <button onClick={handleSubmit} disabled={isLoading}
-          className="w-full py-3 bg-gradient-to-r from-sky-500 to-cyan-500 hover:opacity-80
-            text-white font-semibold rounded-2xl transition disabled:opacity-50 disabled:cursor-not-allowed">
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2">
-              <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
-              {isLogin ? "Logging in..." : "Registering..."}
+          {/* Error */}
+          {error && (
+            <div
+              className="text-red-300 text-sm text-center rounded-xl px-4 py-2"
+              style={{
+                background: 'rgba(248,113,113,0.1)',
+                border: '1px solid rgba(248,113,113,0.25)',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              {error}
             </div>
-          ) : (isLogin ? "Login" : "Register")}
-        </button>
+          )}
+
+          {/* Submit button */}
+          <button
+            onClick={handleSubmit}
+            disabled={isLoading}
+            className="w-full py-3 font-semibold text-white rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: 'linear-gradient(135deg, rgba(14,165,233,0.7), rgba(6,182,212,0.7))',
+              border: '1px solid rgba(34,211,238,0.3)',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 20px rgba(6,182,212,0.25), inset 0 1px 0 rgba(255,255,255,0.15)',
+            }}
+            onMouseEnter={e => !isLoading && (e.target.style.boxShadow = '0 4px 28px rgba(6,182,212,0.45), inset 0 1px 0 rgba(255,255,255,0.2)')}
+            onMouseLeave={e => e.target.style.boxShadow = '0 4px 20px rgba(6,182,212,0.25), inset 0 1px 0 rgba(255,255,255,0.15)'}
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
+                {isLogin ? "Logging in..." : "Registering..."}
+              </div>
+            ) : (isLogin ? "Login" : "Register")}
+          </button>
+        </div>
       </div>
     </div>
   );

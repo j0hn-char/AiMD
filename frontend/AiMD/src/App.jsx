@@ -3,9 +3,10 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./Components/Sidebar";
 import Chat from "./Components/Chat";
 import AuthPage from "./Components/AuthPage";
+import Aurora from "./Components/Aurora";
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem("token") || null);
+  const [token, setToken] = useState(localStorage.getItem("token") || "devtoken");
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -32,7 +33,6 @@ function App() {
     try {
       const res = await fetch("/api/sessions", { headers: authHeaders() });
       const data = await res.json();
-
       if (data.sessions && data.sessions.length > 0) {
         const mapped = data.sessions.map((s) => ({
           id: s.session_id,
@@ -101,9 +101,7 @@ function App() {
     } catch (err) {
       console.error("Failed to delete session", err);
     }
-
     const remaining = chats.filter((c) => c.id !== id);
-
     if (remaining.length === 0) {
       setChats([]);
       setActiveChatId(null);
@@ -146,27 +144,40 @@ function App() {
       } />
       <Route path="/" element={
         !token ? <Navigate to="/auth" /> : (
-          <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950 flex">
-            <Sidebar
-              chats={chats}
-              activeChatId={activeChatId}
-              onSelect={setActiveChatId}
-              onNew={createNewChat}
-              onDelete={deleteChat}
-              onLogout={handleLogout}
-            />
-            {isLoadingChats ? (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="animate-spin w-8 h-8 border-2 border-white/30 border-t-white rounded-full"></div>
-              </div>
-            ) : activeChat ? (
-              <Chat
-                key={activeChatId}
-                chat={activeChat}
-                onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
-                token={token}
+          <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-indigo-950 flex"
+            style={{ position: 'relative' }}>
+            {/* Aurora background */}
+            <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+              <Aurora
+                colorStops={["#0c4a6e", "#164e63", "#134e4a"]}
+                blend={0.6}
+                amplitude={0.8}
+                speed={0.6}
               />
-            ) : null}
+            </div>
+            {/* Content */}
+            <div style={{ position: 'relative', zIndex: 1, display: 'flex', width: '100%' }}>
+              <Sidebar
+                chats={chats}
+                activeChatId={activeChatId}
+                onSelect={setActiveChatId}
+                onNew={createNewChat}
+                onDelete={deleteChat}
+                onLogout={handleLogout}
+              />
+              {isLoadingChats ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="animate-spin w-8 h-8 border-2 border-white/30 border-t-white rounded-full"></div>
+                </div>
+              ) : activeChat ? (
+                <Chat
+                  key={activeChatId}
+                  chat={activeChat}
+                  onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
+                  token={token}
+                />
+              ) : null}
+            </div>
           </div>
         )
       } />
