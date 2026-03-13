@@ -6,7 +6,7 @@ import AuthPage from "./Components/AuthPage";
 import Aurora from "./Components/Aurora";
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem("token") || "devtoken");
+  const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
