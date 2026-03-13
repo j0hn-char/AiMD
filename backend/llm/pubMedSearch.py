@@ -1,13 +1,18 @@
+import os
 import json
 import requests
+from dotenv import load_dotenv
 import xml.etree.ElementTree as ET
-import time
-from extract_relevant_text import get_relevant_chunks
+from .extract_relevant_text import get_relevant_chunks
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from .prompts import PUBMEDSHEARH_TEST
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
+
 
 #configuration
 ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-EMAIL = "ics24128@uom.edu.gr"
+EMAIL = os.getenv("EMAIL")
 FETCH_LIMIT = 20
 
 
@@ -233,22 +238,7 @@ def get_top_papers(ai_diagnosis) -> list[dict]:
 
 if __name__ == "__main__":
    
-    ai_diagnosis = {
-        "consistent": True,
-        "combined_diagnosis": "The patient presents with headache, productive cough, and low-grade fever (approximately 37.1–37.9°C), a symptom cluster most consistent with an acute respiratory tract infection, most likely of viral etiology. The differential diagnosis includes acute viral bronchitis and viral upper respiratory infection (common cold) as the leading possibilities. Other potential causes include influenza, COVID-19 infection, early or mild community-acquired pneumonia if symptoms worsen or sputum becomes purulent, and acute sinusitis with post-nasal drip contributing to cough and headache. Recommended evaluation includes monitoring vital signs (temperature, respiratory rate, and oxygen saturation), performing lung auscultation, and assessing sputum characteristics. Diagnostic testing such as COVID-19 or influenza testing may be appropriate, with additional laboratory studies (e.g., CBC, CRP) and chest radiography considered if bacterial infection or pneumonia is suspected. Medical evaluation is recommended if symptoms persist for several days, worsen, or are accompanied by high fever, shortness of breath, chest pain, or significant fatigue.",
-        "pubmed_keywords": [
-            "Acute Bronchitis",
-            "Upper Respiratory Tract Infections",
-            "Influenza, Human",
-            "COVID-19",
-            "Community-Acquired Pneumonia",
-            "Cough",
-            "Fever",
-            "Respiratory Tract Infections",
-            "Sputum",
-            "Chest Radiography"
-        ]
-    }
+    ai_diagnosis = PUBMEDSHEARH_TEST
     
     papers = get_top_papers(ai_diagnosis)
 # Printing as JSON

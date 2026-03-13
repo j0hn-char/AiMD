@@ -6,7 +6,7 @@ export default function Chat({ chat, onUpdateMessages, token }) {
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [fileName, setFileName] = useState(null);
-  const [mode, setMode] = useState("thinking");
+  const [mode, setMode] = useState("chat");
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -15,6 +15,40 @@ export default function Chat({ chat, onUpdateMessages, token }) {
   };
 
   useEffect(scrollToEnd, [chat.messages]);
+
+  const saveMessage = async (sessionId, role, content, messageMode) => {
+    try {
+      await fetch("/api/session/message", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          mode: messageMode,
+          message: { role, content },
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to save message", err);
+    }
+  };
+
+  const updateSessionTitle = async (sessionId, title) => {
+    try {
+      await fetch("/api/session", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ session_id: sessionId, title }),
+      });
+    } catch (err) {
+      console.error("Failed to update session title", err);
+    }
+  };
 
   const sendMessage = async (file) => {
     const message = inputValue.trim();
@@ -30,12 +64,22 @@ export default function Chat({ chat, onUpdateMessages, token }) {
     setFileName(null);
     setIsThinking(true);
 
+    await saveMessage(chat.id, "user", message, mode);
+
+    if (chat.messages.length === 0) {
+      const title = message.slice(0, 30) + (message.length > 30 ? "..." : "");
+      await updateSessionTitle(chat.id, title);
+    }
+
+    const aiMessageId = Date.now() + Math.random();
+
     try {
       const formData = new FormData();
+      formData.append("session_id", chat.id);
       formData.append("message", message);
       if (file) formData.append("file", file);
 
-      const endpoint = mode === "thinking" ? "/api/analysis" : "/api/chat";
+      const endpoint = mode === "analysis" ? "/api/analysis" : "/api/chat";
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -43,31 +87,45 @@ export default function Chat({ chat, onUpdateMessages, token }) {
         body: formData,
       });
 
-      const data = await res.json();
+      let streamedMessages = [
+        ...newMessages,
+        { content: "", isUser: false, file: null, id: aiMessageId },
+      ];
+      onUpdateMessages(streamedMessages);
+      setIsThinking(false);
 
-      const replied = [
-        ...newMessages,
-        {
-          // content: data.reply,
-          content: "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
-          isUser: false,
-          file: null,
-          id: Date.now() + Math.random(),
-        },
-      ];
-      onUpdateMessages(replied);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = "";
+      let attachedFile = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullContent += decoder.decode(value, { stream: true });
+
+        if (fullContent.includes("__FILE__") && fullContent.includes("__ENDFILE__")) {
+          const fileStart = fullContent.indexOf("__FILE__") + 8;
+          const fileEnd = fullContent.indexOf("__ENDFILE__");
+          const fileMeta = JSON.parse(fullContent.slice(fileStart, fileEnd));
+          attachedFile = fileMeta;
+          fullContent = fullContent.slice(fileEnd + 11);
+        }
+
+        streamedMessages = [
+          ...newMessages,
+          { content: fullContent, isUser: false, file: attachedFile, id: aiMessageId },
+        ];
+        onUpdateMessages(streamedMessages);
+      }
+
+      await saveMessage(chat.id, "assistant", fullContent, mode);
+
     } catch (err) {
-      const replied = [
+      onUpdateMessages([
         ...newMessages,
-        {
-          content: "Something went wrong. Please try again.",
-          isUser: false,
-          file: null,
-          id: Date.now() + Math.random(),
-        },
-      ];
-      onUpdateMessages(replied);
-    } finally {
+        { content: "Something went wrong. Please try again.", isUser: false, file: null, id: Date.now() + Math.random() },
+      ]);
       setIsThinking(false);
     }
   };
@@ -85,14 +143,14 @@ export default function Chat({ chat, onUpdateMessages, token }) {
       <div className="flex items-center justify-center gap-4">
         <img src="/logo.svg" className="w-24 h-24" />
         <h1 className="text-4xl sm:text-5xl lg:text-7xl font-light bg-gradient-to-r
-        from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center">
+          from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center">
           Welcome to AiMD
         </h1>
       </div>
       <div className="relative w-72 flex items-center bg-gray-800/60 border border-gray-600 rounded-2xl px-1 py-1">
         <div
           className={`absolute top-1 bottom-1 w-[calc(50%-7px)] rounded-xl transition-all duration-300
-    ${mode === "chat"
+            ${mode === "chat"
               ? "left-1 bg-gradient-to-r from-sky-500 to-cyan-500"
               : "left-[calc(50%+3px)] bg-gradient-to-r from-violet-500 to-purple-600"
             }`}
@@ -100,22 +158,20 @@ export default function Chat({ chat, onUpdateMessages, token }) {
         <button
           onClick={() => setMode("chat")}
           className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2
-      ${mode === "chat" ? "text-white" : "text-gray-400 hover:text-white"}`}
+            ${mode === "chat" ? "text-white" : "text-gray-400 hover:text-white"}`}
         >
           💬 Chat
         </button>
         <button
-          onClick={() => setMode("thinking")}
+          onClick={() => setMode("analysis")}
           className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2
-      ${mode === "thinking" ? "text-white" : "text-gray-400 hover:text-white"}`}
+            ${mode === "analysis" ? "text-white" : "text-gray-400 hover:text-white"}`}
         >
           🧠 Analysis
         </button>
       </div>
-      <div
-        className="w-full max-w-6xl flex flex-col flex-1 min-h-0 bg-gradient-to-r from-gray-800/90 to-gray-700/90
-  backdrop-blur-md border border-gray-600 rounded-3xl p-6 shadow-2xl"
-      >
+      <div className="w-full max-w-6xl flex flex-col flex-1 min-h-0 bg-gradient-to-r from-gray-800/90 to-gray-700/90
+        backdrop-blur-md border border-gray-600 rounded-3xl p-6 shadow-2xl">
         <ChatWindow
           messages={chat.messages}
           isThinking={isThinking}

@@ -1,8 +1,14 @@
-from fastapi import HTTPException, Request,status
-from src.sessionStorage import get_session,update_mode_history,set_analysis_result
-
-from llm.askAI import callGPT,responseComparison,finalizeResponse
+from fastapi import HTTPException, Request, status, UploadFile
+from fastapi.responses import PlainTextResponse
+from src.sessionStorage import get_session, update_mode_history, set_analysis_result
+from llm.askAI import callGPT, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
+from file_processor import process_files
+from llm.generate_final_report import generate_pdf
+import json
+import re
+import io
+import base64
 
 SYSTEM_CHAT = {
     "role": "system",
@@ -23,7 +29,6 @@ SYSTEM_ANALYSIS = {
 }
 
 
-#NA PAEI STO SESSION STORAGE KAPOIA STIGMH (GIA XARH OMOIOMORFIAS)
 async def _get_authorized_session(session_id: str, user: dict) -> dict:
     session = await get_session(session_id)
 
@@ -41,62 +46,122 @@ async def _get_authorized_session(session_id: str, user: dict) -> dict:
 
     return session
 
-def _build_conversation(history:list[dict],system_msg:dict) -> list[dict]:
+
+def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
     conversation = [system_msg]
-    for msg in history: 
-        conversation.append({"role":msg["role"],"content":msg["content"]})
+    for msg in history:
+        conversation.append({"role": msg["role"], "content": msg["content"]})
     return conversation
 
-async def chat_route(request: Request, user:dict):
-    body = await request.json()
-    session_id = body.get("session_id")
-    user_message= body.get("message","").strip()
 
-    #1
+async def chat_route(request: Request, user: dict):
+    form = await request.form()
+    session_id = form.get("session_id")
+    user_message = (form.get("message") or "").strip()
+
     if not session_id or not user_message:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_id and message are required"
         )
-    
-    #2
-    session = await _get_authorized_session(session_id,user)
 
-    #3
-    user_msg = {"role":"user","content":user_message}
-    await update_mode_history(session_id,"chat",user_msg)
+    session = await _get_authorized_session(session_id, user)
 
-    #4
-    history = session["conversations"]["chat"]["history"] #AUTH H SYGKEKRIMENH GRAMMH MPAINEI MESA TRIA EPIPEDA STO PYTHON DICTIONARY POY EXOUME KANEI STO BHMA 2 KAI PAIRNEI TO HISTORY APO TO DICTIONARY DHLADH TO ISTORIKO MHNYMATWN 
-    conversation = _build_conversation(history,SYSTEM_CHAT)
-    conversation.append({"role":"user","content":user_message})
+    history = session["conversations"]["chat"]["history"]
+    conversation = _build_conversation(history, SYSTEM_CHAT)
+    conversation.append({"role": "user", "content": user_message})
+
     reply = callGPT(conversation)
 
-    #5 
-    assistant_msg = {"role":"assistant","content":reply}
-    await update_mode_history(session_id,"chat",assistant_msg)
-    return {"reply":reply,"mode":"chat"}
+    return PlainTextResponse(reply)
 
 
-async def analysis_route(request: Request, user:dict):
-    body = await request.json()
-    session_id = body.get("session_id")
-    user_message = body.get("message","").strip()
-    filename = body.get("filename", "user_input")
-    
-    #1
-    if not session_id or not user_message:
+async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
+    if not session_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id and message are required"
+            detail="session_id is required"
         )
-    #2
-    session = await _get_authorized_session
 
-    #3 
-    user_msg = {"role":"user","content":user_message}
-    await update_mode_history(session_id,"analysis",user_msg)
+    session = await _get_authorized_session(session_id, user)
 
-    #4 
-    history = session["conversations"]["chat"]["history"]
-    
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file is required"
+        )
+
+    raw_files = []
+    for file in files:
+        contents = await file.read()
+        raw_files.append((contents, file.filename))
+
+    processed = process_files(raw_files)
+
+    if processed["errors"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"errors": processed["errors"]}
+        )
+
+    combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
+    content_parts = []
+
+    if combined_text:
+        content_parts.append({"type": "text", "text": combined_text})
+
+    for img in processed["images"]:
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}
+        })
+
+    history = session["conversations"]["analysis"]["history"]
+    conversation = _build_conversation(history, SYSTEM_ANALYSIS)
+    conversation.append({"role": "user", "content": content_parts})
+
+    comparison = responseComparison(conversation)
+
+    if "error" in comparison:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=comparison["error"]
+        )
+
+    top_papers = get_top_papers(comparison)
+
+    final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
+
+    cleaned = re.sub(r"```json|```", "", final_raw).strip()
+    try:
+        final = json.loads(cleaned)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to parse final report"
+        )
+
+    report = final.get("report", "")
+    summary = final.get("summary", "")
+
+    buffer = io.BytesIO()
+    generate_pdf(report, buffer)
+    buffer.seek(0)
+    pdf_bytes = buffer.read()
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+    filenames = [f for _, f in raw_files]
+    await set_analysis_result(
+        session_id,
+        {"report": report, "summary": summary},
+        ", ".join(filenames)
+    )
+
+    file_meta = json.dumps({
+        "type": "file",
+        "filename": "medical_report.pdf",
+        "mimetype": "application/pdf",
+        "data": pdf_base64
+    })
+
+    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}")
