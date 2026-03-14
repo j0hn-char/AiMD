@@ -2,7 +2,7 @@ import { useState } from "react";
 import SpotlightCard from './SpotlightCard';
 import AnimatedList from './AnimatedList';
 
-export default function Sidebar({ chats, activeChatId, onSelect, onNew, onDelete, onLogout }) {
+export default function Sidebar({ chats, activeChatId, onSelect, onNew, onDelete, onLogout, userEmail }) {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -73,6 +73,18 @@ export default function Sidebar({ chats, activeChatId, onSelect, onNew, onDelete
               )}
             />
           </div>
+
+          {userEmail && (
+            <div
+              className="flex-shrink-0 px-3 py-2 rounded-xl text-xs text-white/40 truncate text-center"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+              }}
+            >
+              👤 {userEmail}
+            </div>
+          )}
 
           <SpotlightCard
             className="flex-shrink-0"

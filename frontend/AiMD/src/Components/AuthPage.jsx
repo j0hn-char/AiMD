@@ -37,6 +37,7 @@ export default function AuthPage({ onLogin }) {
         return;
       }
 
+      localStorage.setItem('userEmail', email);
       onLogin(data.access_token);
     } catch (err) {
       setError("Could not connect to server.");
@@ -51,14 +52,14 @@ export default function AuthPage({ onLogin }) {
 
   return (
     <div
-      className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-teal-950 flex flex-col items-center justify-center p-4 gap-8"
-      style={{ position: 'relative' }}
+      className="min-h-screen flex flex-col items-center justify-center p-4 gap-8"
+      style={{ position: 'relative', background: isLogin ? '#030810' : '#030d0d', transition: 'background 1.5s ease' }}
     >
       {/* <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         <Plasma color="#075985" speed={0.6} direction="forward" scale={1.1} opacity={0.5} mouseInteractive={true} />
       </div> */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-        <Plasma color="#0e7490" speed={0.5} direction="alternate" scale={1.4} opacity={0.5} mouseInteractive={false} />
+        <Plasma color={isLogin ? "#0e7490" : "#0d7a6e"} speed={0.5} direction="alternate" scale={1.4} opacity={0.5} mouseInteractive={false} />
       </div>
       {/* <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
         <Plasma color="#0f766e" speed={0.4} direction="reverse" scale={1.7} opacity={0.35} mouseInteractive={true} />
@@ -72,7 +73,7 @@ export default function AuthPage({ onLogin }) {
           <img src="/logo.svg" className="w-20 h-20 drop-shadow-lg" />
           <h1
             className="text-6xl sm:text-7xl bg-gradient-to-r from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent"
-            style={{ filter: 'drop-shadow(0 0 24px rgba(34,211,238,0.35))' }}
+            style={{ fontFamily: "'Outfit', sans-serif", filter: 'drop-shadow(0 0 24px rgba(34,211,238,0.35))' }}
           >
             AiMD
           </h1>

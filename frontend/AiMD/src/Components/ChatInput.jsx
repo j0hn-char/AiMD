@@ -1,4 +1,4 @@
-export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, isThinking, fileInputRef, fileName, onFileChange }) {
+export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onCancel, isThinking, fileInputRef, fileName, onFileChange }) {
 
   const handleFileChange = (e) => {
     onFileChange(e.target.files[0]?.name || null);
@@ -72,26 +72,41 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, isT
           onBlur={e => e.target.style.border = '1px solid rgba(255,255,255,0.1)'}
         />
 
-        <button
-          onClick={handleSend}
-          disabled={isThinking || (!inputValue.trim() && !fileName)}
-          className="px-6 py-3 font-semibold text-white rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background: 'linear-gradient(135deg, rgba(14,165,233,0.7), rgba(6,182,212,0.7))',
-            border: '1px solid rgba(34,211,238,0.3)',
-            backdropFilter: 'blur(8px)',
-            boxShadow: '0 4px 16px rgba(6,182,212,0.2), inset 0 1px 0 rgba(255,255,255,0.15)',
-          }}
-          onMouseEnter={e => !isThinking && (e.currentTarget.style.boxShadow = '0 4px 24px rgba(6,182,212,0.4), inset 0 1px 0 rgba(255,255,255,0.2)')}
-          onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(6,182,212,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}
-        >
-          {isThinking ? (
+        {isThinking ? (
+          <button
+            onClick={onCancel}
+            className="px-6 py-3 font-semibold text-white rounded-2xl transition-all duration-300"
+            style={{
+              background: 'linear-gradient(135deg, rgba(239,68,68,0.7), rgba(220,38,38,0.7))',
+              border: '1px solid rgba(248,113,113,0.3)',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 16px rgba(239,68,68,0.2), inset 0 1px 0 rgba(255,255,255,0.15)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 24px rgba(239,68,68,0.4), inset 0 1px 0 rgba(255,255,255,0.2)'}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(239,68,68,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}
+          >
             <div className="flex items-center gap-2">
-              <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
-              Sending
+              <div className="w-3 h-3 bg-white rounded-sm"></div>
+              Stop
             </div>
-          ) : "Send"}
-        </button>
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={!inputValue.trim() && !fileName}
+            className="px-6 py-3 font-semibold text-white rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: 'linear-gradient(135deg, rgba(14,165,233,0.7), rgba(6,182,212,0.7))',
+              border: '1px solid rgba(34,211,238,0.3)',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 16px rgba(6,182,212,0.2), inset 0 1px 0 rgba(255,255,255,0.15)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 24px rgba(6,182,212,0.4), inset 0 1px 0 rgba(255,255,255,0.2)'}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(6,182,212,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}
+          >
+            Send
+          </button>
+        )}
       </div>
     </div>
   );
