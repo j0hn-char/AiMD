@@ -1,146 +1,99 @@
 import os
 import json
-import requests
-from dotenv import load_dotenv
+import asyncio
+import httpx
 import xml.etree.ElementTree as ET
+from dotenv import load_dotenv
 from .extract_relevant_text import get_relevant_chunks
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
- 
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
- 
- 
-#configuration
+
 ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EMAIL = os.getenv("EMAIL")
-NCBI_API_KEY = os.getenv("NCBI_API_KEY")  # προαιρετικό, ανεβάζει rate limit σε 10 req/sec
-FETCH_LIMIT = 15  # μειώθηκε από 20 για να αποφύγουμε timeouts
- 
- 
-def make_session() -> requests.Session:
-    session = requests.Session()
-    retries = Retry(total=3, backoff_factor=2, status_forcelist=[500, 502, 503, 504])
-    session.mount("https://", HTTPAdapter(max_retries=retries))
-    return session
- 
- 
+NCBI_API_KEY = os.getenv("NCBI_API_KEY")
+FETCH_LIMIT = 15
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _base_params(extra: dict) -> dict:
+    p = {"email": EMAIL, **extra}
+    if NCBI_API_KEY:
+        p["api_key"] = NCBI_API_KEY
+    return p
+
+def _make_client() -> httpx.AsyncClient:
+    transport = httpx.AsyncHTTPTransport(retries=3)
+    return httpx.AsyncClient(transport=transport, timeout=60)
+
 def build_query(keywords: list[str]) -> str:
-    #keywords are combined in a pubMed query string
     return " OR ".join(f'"{kw}"[MeSH Terms]' for kw in keywords)
- 
-def search_pubmed(query: str, max_results: int = FETCH_LIMIT) -> list[str]:
-    
-    #Searches in pubMed and returns the PMIDs (sorted by relevance by NCBI)
-    
-    url = f"{ENTREZ_BASE}/esearch.fcgi" #calls the 'esearch' NBCI's endpoint
-    params = {
-        "db": "pubmed",
-        "term": query,
-        "retmax": max_results,
-        "sort": "relevance",   # NCBI returns the most relevant ones first
-        "retmode": "json",
-        "email": EMAIL,
-    }
-    if NCBI_API_KEY:
-        params["api_key"] = NCBI_API_KEY
- 
-    session = make_session()
-    response = session.get(url, params=params, timeout=30)
-    response.raise_for_status()
- 
-    data = response.json()
-    pmids = data.get("esearchresult", {}).get("idlist", [])
-    return pmids
- 
- 
-def fetch_metadata(pmids: list[str]) -> list[dict]:
-    """
-    Downloads the metadata (title, authors, journal, year, doi, pmcid)
-    for the given PMIDs.
-    """
-    if not pmids:
-        return []
- 
-    url = f"{ENTREZ_BASE}/efetch.fcgi" #calls the 'efetch' NBCI's endpoint to get the full xml with the article's info
-    params = {
-        "db": "pubmed",
-        "id": ",".join(pmids),
-        "retmode": "xml",
-        "email": EMAIL,
-    }
-    if NCBI_API_KEY:
-        params["api_key"] = NCBI_API_KEY
- 
-    session = make_session()
-    response = session.get(url, params=params, timeout=60)  # αυξημένο timeout
-    response.raise_for_status()
- 
-    return parse_metadata_xml(response.text)
- 
- 
+
+
+# ── Pure XML parsers (no I/O — no changes needed) ─────────────────────────────
+
 def parse_metadata_xml(xml_text: str) -> list[dict]:
-    #analyzes the xml returned from NCBI and extracts each article's metadata
     root = ET.fromstring(xml_text)
     articles = []
- 
+
     for article_node in root.findall(".//PubmedArticle"):
-        # PMID
         pmid_node = article_node.find(".//PMID")
         pmid = pmid_node.text if pmid_node is not None else "N/A"
- 
-        # title
+
         title_node = article_node.find(".//ArticleTitle")
         title = "".join(title_node.itertext()) if title_node is not None else "No title"
- 
-        # Authors
+
         author_nodes = article_node.findall(".//Author")
         authors = []
-        for a in author_nodes:          
+        for a in author_nodes:
             last = a.findtext("LastName", "")
             fore = a.findtext("ForeName", "")
             if last:
-                # APA format: Last, F.
                 initials = " ".join(f"{n[0]}." for n in fore.split()) if fore else ""
                 authors.append(f"{last}, {initials}".strip(", "))
- 
-        # Journal, year, volume, issue, pages
-        journal = article_node.findtext(".//Journal/Title",         "Unknown journal")
-        year    = article_node.findtext(".//PubDate/Year",          "n.d.")
-        volume  = article_node.findtext(".//JournalIssue/Volume",   "")
-        issue   = article_node.findtext(".//JournalIssue/Issue",    "")
-        pages   = article_node.findtext(".//MedlinePgn",            "")
- 
-        # DOI
-        doi = article_node.findtext(".//ArticleId[@IdType='doi']", None)
- 
-        # PMCID (which exists only if the article provides open access)
-        pmcid = article_node.findtext(".//ArticleId[@IdType='pmc']", None)
- 
+
+        journal = article_node.findtext(".//Journal/Title",       "Unknown journal")
+        year    = article_node.findtext(".//PubDate/Year",        "n.d.")
+        volume  = article_node.findtext(".//JournalIssue/Volume", "")
+        issue   = article_node.findtext(".//JournalIssue/Issue",  "")
+        pages   = article_node.findtext(".//MedlinePgn",          "")
+        doi     = article_node.findtext(".//ArticleId[@IdType='doi']", None)
+        pmcid   = article_node.findtext(".//ArticleId[@IdType='pmc']", None)
+
         articles.append({
-            "pmid":        pmid,
-            "pmcid":       pmcid,
-            "title":       title,
-            "authors":     authors,
-            "journal":     journal,
-            "year":        year,
-            "volume":      volume,
-            "issue":       issue,
-            "pages":       pages,
-            "doi":         doi,
-            "url":         f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+            "pmid":    pmid,
+            "pmcid":   pmcid,
+            "title":   title,
+            "authors": authors,
+            "journal": journal,
+            "year":    year,
+            "volume":  volume,
+            "issue":   issue,
+            "pages":   pages,
+            "doi":     doi,
+            "url":     f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
         })
- 
+
     return articles
- 
- 
+
+
+def _extract_text_from_pmc_xml(xml_text: str) -> str:
+    root = ET.fromstring(xml_text)
+    chunks = []
+    for elem in root.iter():
+        if elem.tag == "title":
+            text = "".join(elem.itertext()).strip()
+            if text:
+                chunks.append(f"\n## {text}\n")
+        elif elem.tag == "p":
+            text = "".join(elem.itertext()).strip()
+            if text:
+                chunks.append(text)
+    return "\n".join(chunks).strip()
+
+
 def build_apa_citation(article: dict) -> str:
-    """
-    Builds APA 7th edition citation.
-    Form: Last, F., & Last, F. (year). Title. Journal, volume(issue), pages. DOI
-    """
     authors = article["authors"]
- 
     if not authors:
         author_str = "Unknown Author"
     elif len(authors) == 1:
@@ -148,13 +101,12 @@ def build_apa_citation(article: dict) -> str:
     elif len(authors) <= 20:
         author_str = ", ".join(authors[:-1]) + f", & {authors[-1]}"
     else:
-        # APA: πρώτοι 19, ... , τελευταίος
         author_str = ", ".join(authors[:19]) + f", ... {authors[-1]}"
- 
+
     vol_issue = article["volume"]
     if article["issue"]:
         vol_issue += f"({article['issue']})"
- 
+
     parts = [
         f"{author_str} ({article['year']}).",
         f"{article['title']}.",
@@ -165,104 +117,87 @@ def build_apa_citation(article: dict) -> str:
         f" https://doi.org/{article['doi']}" if article["doi"] else f" {article['url']}",
     ]
     return "".join(parts)
- 
-def fetch_full_text(pmcid: str) -> str | None:
-    params = {
-        "db":      "pmc",
-        "id":      pmcid,
-        "retmode": "xml",
-        "rettype": "full",
-        "email":   EMAIL,
-    }
-    if NCBI_API_KEY:
-        params["api_key"] = NCBI_API_KEY
+
+
+# ── Async network calls ────────────────────────────────────────────────────────
+
+async def search_pubmed(client: httpx.AsyncClient, query: str, max_results: int = FETCH_LIMIT) -> list[str]:
+    params = _base_params({
+        "db": "pubmed", "term": query,
+        "retmax": max_results, "sort": "relevance", "retmode": "json",
+    })
+    r = await client.get(f"{ENTREZ_BASE}/esearch.fcgi", params=params)
+    r.raise_for_status()
+    return r.json().get("esearchresult", {}).get("idlist", [])
+
+
+async def fetch_metadata(client: httpx.AsyncClient, pmids: list[str]) -> list[dict]:
+    if not pmids:
+        return []
+    params = _base_params({"db": "pubmed", "id": ",".join(pmids), "retmode": "xml"})
+    r = await client.get(f"{ENTREZ_BASE}/efetch.fcgi", params=params)
+    r.raise_for_status()
+    return parse_metadata_xml(r.text)
+
+
+async def fetch_full_text(client: httpx.AsyncClient, pmcid: str) -> str | None:
+    params = _base_params({"db": "pmc", "id": pmcid, "retmode": "xml", "rettype": "full"})
     try:
-        session = make_session()
-        r = session.get(f"{ENTREZ_BASE}/efetch.fcgi", params=params, timeout=60)
+        r = await client.get(f"{ENTREZ_BASE}/efetch.fcgi", params=params)
         r.raise_for_status()
         return _extract_text_from_pmc_xml(r.text)
     except Exception as e:
-        print(f"  Failed to fetch full text for the article: {pmcid}: {e}")
+        print(f"  Failed to fetch full text for {pmcid}: {e}")
         return None
-    
-def _extract_text_from_pmc_xml(xml_text: str) -> str:
-    root   = ET.fromstring(xml_text)
-    chunks = []
- 
-    for elem in root.iter():
-        # titles of units
-        if elem.tag == "title":
-            text = "".join(elem.itertext()).strip()
-            if text:
-                chunks.append(f"\n## {text}\n")
-        # Paragraphs
-        elif elem.tag == "p":
-            text = "".join(elem.itertext()).strip()
-            if text:
-                chunks.append(text)
- 
-    return "\n".join(chunks).strip()
- 
-def get_top_papers(ai_diagnosis):
-    """
-    1. Builds the query from given keywords for PubMed
-    2. Fetches the most relevant PMIDs
-    3. Checks which articles provide open access
-    4. Fetches full text for each one of them
-    5. Returns a json list which contains the following information: url, title, citation (APA), full_text
-    """
+
+
+async def _fetch_article(client: httpx.AsyncClient, article: dict) -> dict | None:
+    pmcid = article["pmcid"]
+    if not pmcid:
+        print(f" [{article['pmid']}] {article['title'][:60]}… — closed access, skipping")
+        return None
+    print(f" [{article['pmid']}] {article['title'][:60]}… — fetching...")
+    full_text = await fetch_full_text(client, pmcid)
+    if not full_text:
+        return None
+    return {
+        "url":      article["url"],
+        "title":    article["title"],
+        "citation": build_apa_citation(article),
+        "text":     full_text,
+    }
+
+
+# ── Main entry point ───────────────────────────────────────────────────────────
+
+async def get_top_papers(ai_diagnosis: dict) -> list:
     keywords = ai_diagnosis["pubmed_keywords"]
-    print(f"Keywords : {keywords}")
     query = build_query(keywords)
-    print(f"Query    : {query}\n")
- 
-    pmids = list(dict.fromkeys(search_pubmed(query, max_results=FETCH_LIMIT)))
-    if not pmids:
-        print("No results found")
-        return []
- 
-    print(f"{len(pmids)} articles were found. Checking open access...\n")
- 
-    articles = fetch_metadata(pmids)
- 
-    def fetch_article(article):
-        pmcid = article["pmcid"]
-        if not pmcid:
-            print(f" [{article['pmid']}] {article['title'][:60]}… — closed access, dismiss")
-            return None
-        
-        print(f" [{article['pmid']}] {article['title'][:60]}… — fetching...")
-        full_text = fetch_full_text(pmcid)
-        if not full_text:
-            return None
-        return {
-            "url":      article["url"],
-            "title":    article["title"],
-            "citation": build_apa_citation(article),
-            "text":     full_text,
-        }
- 
-    papers = []
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(fetch_article, a): a for a in articles}
-        for future in as_completed(futures):
-            result = future.result()
-            if result:
-                papers.append(result)
- 
+    print(f"Keywords : {keywords}\nQuery    : {query}\n")
+
+    async with _make_client() as client:
+        pmids = list(dict.fromkeys(await search_pubmed(client, query)))
+        if not pmids:
+            print("No results found")
+            return []
+
+        print(f"{len(pmids)} articles found. Fetching metadata + full texts concurrently...\n")
+
+        articles = await fetch_metadata(client, pmids)
+
+        # All open-access full-text fetches fire at the same time
+        results = await asyncio.gather(*[_fetch_article(client, a) for a in articles])
+
+    papers = [r for r in results if r is not None]
+
     if not papers:
-        print("No open access articles found. Skipping relevance ranking.")
+        print("No open access articles found.")
         return []
 
     return get_relevant_chunks(ai_diagnosis["combined_diagnosis"], papers)
- 
-# ── Entry point ────────────────────────────────────────────────────────────────
- 
+
+
 if __name__ == "__main__":
     from .prompts import PUBMEDSEARCH_TEST
- 
-    ai_diagnosis = PUBMEDSEARCH_TEST
-    
-    papers = get_top_papers(ai_diagnosis)
-# Printing as JSON
+    papers = asyncio.run(get_top_papers(PUBMEDSEARCH_TEST))
     print(json.dumps(papers, ensure_ascii=False, indent=2))

@@ -1,5 +1,5 @@
 from fastapi import HTTPException, Request, status, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse
 from src.sessionStorage import get_session, update_mode_history, set_analysis_result
 from llm.askAI import callGPT, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
@@ -14,9 +14,11 @@ SYSTEM_CHAT = {
     "role": "system",
     "content": (
         "You are a helpful and empathetic medical assistant. "
-        "Answer the user's questions clearly and ask clarifying questions when needed."
-        "Where appropriate, suggest 1 to 3 follow-up questions the patient could ask you"
-        "Answer question ONLY regarding medical interest"
+        "Answer the user's questions clearly and ask clarifying questions when needed. "
+        "Where appropriate, suggest 1 to 3 follow-up questions the patient could ask you. "
+        "Answer questions ONLY regarding medical interest. "
+        "Format your responses using Markdown: use **bold** for key medical terms, "
+        "*italics* for emphasis, bullet points for lists, and ## headings for sections when appropriate."
     ),
 }
 
@@ -25,7 +27,9 @@ SYSTEM_ANALYSIS = {
     "content": (
         "You are a highly experienced medical assistant. "
         "Analyze the provided medical information carefully and provide "
-        "a clear, professional diagnosis with recommendations."
+        "a clear, professional diagnosis with recommendations. "
+        "Format your responses using Markdown: use **bold** for key medical terms, "
+        "*italics* for emphasis, bullet points for lists, and ## headings for sections when appropriate."
     ),
 }
 
@@ -73,9 +77,9 @@ async def chat_route(request: Request, user: dict):
     conversation = _build_conversation(history, SYSTEM_CHAT)
     conversation.append({"role": "user", "content": user_message})
 
-    reply = callGPT(conversation, 0.2)
+    reply = await callGPT(conversation, 0.2)
 
-    return PlainTextResponse(reply)
+    return JSONResponse({"role": "assistant", "content": reply})
 
 
 async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
@@ -107,7 +111,6 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     if combined_text:
         content_parts.append({"type": "text", "text": combined_text})
 
-    # AFTER
     for img in processed["images"]:
         if img.get("data") and img.get("media_type"):
             content_parts.append({
@@ -129,7 +132,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         raise HTTPException(status_code=400, detail=f"Malformed conversation payload: {e}")
 
     conversation.append({"role": "user", "content": user_content})
-    comparison = responseComparison(conversation)
+    comparison = await responseComparison(conversation)
 
     if "error" in comparison:
         raise HTTPException(
@@ -137,9 +140,9 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
             detail=comparison["error"]
         )
 
-    top_papers = get_top_papers(comparison)
+    top_papers = await get_top_papers(comparison)
 
-    final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
+    final_raw = await finalizeResponse(comparison["combined_diagnosis"], top_papers)
 
     if isinstance(final_raw, dict):
         final = final_raw
@@ -165,20 +168,22 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     filenames = [f for _, f in raw_files]
     filename = ", ".join(filenames) if filenames else "medical_report.pdf"
     await set_analysis_result(
-    session_id,
-    {
-        "report": report,
-        "summary": summary,
-        "pdf": pdf_base64  # ← αποθήκευσε το PDF
-    },
-    filename  # ← πάντα έχει τιμή
-)
+        session_id,
+        {
+            "report": report,
+            "summary": summary,
+            "pdf": pdf_base64
+        },
+        filename
+    )
 
-    file_meta = json.dumps({
-        "type": "file",
-        "filename": "medical_report.pdf",
-        "mimetype": "application/pdf",
-        "data": pdf_base64
+    return JSONResponse({
+        "role": "assistant",
+        "content": summary,
+        "file": {
+            "type": "file",
+            "filename": "medical_report.pdf",
+            "mimetype": "application/pdf",
+            "data": pdf_base64
+        }
     })
-
-    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}")

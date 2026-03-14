@@ -71,28 +71,15 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
         body: formData,
       });
 
-      let streamedMessages = [...newMessages, { content: "", isUser: false, file: null, id: aiMessageId }];
-      onUpdateMessages(streamedMessages);
       setIsThinking(false);
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullContent = "";
-      let attachedFile = null;
+      const data = await res.json();
+      const fullContent = data.content || "";
+      const attachedFile = data.file || null;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullContent += decoder.decode(value, { stream: true });
-        if (fullContent.includes("__FILE__") && fullContent.includes("__ENDFILE__")) {
-          const fileStart = fullContent.indexOf("__FILE__") + 8;
-          const fileEnd = fullContent.indexOf("__ENDFILE__");
-          attachedFile = JSON.parse(fullContent.slice(fileStart, fileEnd));
-          fullContent = fullContent.slice(fileEnd + 11);
-        }
-        streamedMessages = [...newMessages, { content: fullContent, isUser: false, file: attachedFile, id: aiMessageId }];
-        onUpdateMessages(streamedMessages);
-      }
+      const finalMessages = [...newMessages, { content: fullContent, isUser: false, file: attachedFile, id: aiMessageId }];
+      onUpdateMessages(finalMessages);
+
       await saveMessage(chat.id, "assistant", fullContent, mode);
     } catch (err) {
       if (err.message === "Session expired") return;
