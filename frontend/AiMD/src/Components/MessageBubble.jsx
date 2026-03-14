@@ -1,6 +1,21 @@
 import ReactMarkdown from "react-markdown";
+import { useState } from "react";
 
-export default function MessageBubble({ msg }) {
+export default function MessageBubble({ msg, token, sessionId }) {
+  const [feedbackSent, setFeedbackSent] = useState(null);
+
+  const sendFeedback = async (vote) => {
+    if (!msg.citations || feedbackSent) return;
+    const chunkIds = msg.citations.map((_, i) => i.toString());
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, chunk_ids: chunkIds, vote }),
+      });
+      setFeedbackSent(vote);
+    } catch (e) { console.error("Feedback failed", e); }
+  };
   const downloadFile = (fileData) => {
     const byteChars = atob(fileData.data);
     const byteArray = new Uint8Array([...byteChars].map(c => c.charCodeAt(0)));
@@ -43,6 +58,34 @@ export default function MessageBubble({ msg }) {
           >
             ⬇️ Download {msg.file.filename}
           </button>
+        )}
+
+        {msg.citations && msg.citations.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1">
+            <p className="text-white/30 text-xs font-semibold uppercase tracking-wide">Sources used</p>
+            {msg.citations.map((c, i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-white/50"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <span className="text-cyan-400/70">{c.source === "pubmed" ? "📄 PubMed" : "📎 Upload"}</span>
+                <span className="truncate flex-1">{c.filename}</span>
+                <span className="text-white/30 shrink-0">relevance: {(c.score * 100).toFixed(0)}%</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-white/20 text-xs">Was this helpful?</span>
+              <button
+                onClick={() => sendFeedback("up")}
+                disabled={!!feedbackSent}
+                className={`text-sm transition ${feedbackSent === "up" ? "opacity-100" : "opacity-40 hover:opacity-100"}`}
+              >👍</button>
+              <button
+                onClick={() => sendFeedback("down")}
+                disabled={!!feedbackSent}
+                className={`text-sm transition ${feedbackSent === "down" ? "opacity-100" : "opacity-40 hover:opacity-100"}`}
+              >👎</button>
+              {feedbackSent && <span className="text-white/30 text-xs">Thanks for the feedback!</span>}
+            </div>
+          </div>
         )}
       </div>
     );

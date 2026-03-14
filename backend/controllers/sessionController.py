@@ -1,46 +1,40 @@
-from fastapi import HTTPException, Request, status
-from src.sessionStorage import (
-    get_session,
-    get_user_sessions,
-    save_session,
-    delete_session,
-    update_mode_history,
-    set_analysis_result
-)
-from llm.askAI import callGPT
-import uuid
-from datetime import datetime, timezone
+from fastapi import HTTPException, Request, status, UploadFile
+from fastapi.responses import PlainTextResponse
+from src.sessionStorage import get_session, update_mode_history, set_analysis_result
+from llm.askAI import callGPT, responseComparison, finalizeResponse
+from llm.pubMedSearch import get_top_papers
+from file_processor import process_files
+from llm.generate_final_report import generate_pdf
+from rag.embedder import embed_text
+from rag.vectorstore import query_chunks
+from rag.ingestion import ingest_document, ingest_pubmed_papers
+import json
+import re
+import io
+import base64
+
+SYSTEM_CHAT = {
+    "role": "system",
+    "content": (
+        "You are a helpful and empathetic medical assistant. "
+        "Answer the user's questions clearly and ask clarifying questions when needed. "
+        "Answer questions ONLY regarding medical interest. "
+        "When relevant context is provided below, use it to ground your answer."
+    ),
+}
+
+SYSTEM_ANALYSIS = {
+    "role": "system",
+    "content": (
+        "You are a highly experienced medical assistant. "
+        "Analyze the provided medical information carefully and provide "
+        "a clear, professional diagnosis with recommendations. "
+        "When relevant context from documents or research is provided, use it to support your analysis."
+    ),
+}
 
 
-def generate_session_title(first_message: str) -> str:
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "You are a medical assistant. "
-                "Generate a very short, descriptive title (max 5 words) "
-                "for a medical chat session based on the user's first message. "
-                "The title should capture the main medical topic or symptom. "
-                "Respond ONLY with the title, no punctuation, no explanation."
-            )
-        },
-        {
-            "role": "user",
-            "content": first_message
-        }
-    ]
-    return callGPT(prompt, 0.2)
-
-
-async def get_session_route(request: Request, user: dict):
-    session_id = request.query_params.get("session_id")
-
-    if not session_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id is required"
-        )
-
+async def _get_authorized_session(session_id: str, user: dict) -> dict:
     session = await get_session(session_id)
 
     if not session:
@@ -55,163 +49,187 @@ async def get_session_route(request: Request, user: dict):
             detail="Access denied"
         )
 
-    return {
-        "session_id":      session["session_id"],
-        "title":           session.get("title"),
-        "created_at":      session.get("created_at"),
-        "conversations":   session["conversations"],
-        "analysis_result": session["conversations"]["analysis"].get("analysis_result"),
-        "file":            session["conversations"]["analysis"].get("file")
-    }
+    return session
 
 
-async def get_user_sessions_route(request: Request, user: dict):
-    user_id = user.get("sub")
+def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
+    conversation = [system_msg]
+    for msg in history:
+        conversation.append({"role": msg["role"], "content": msg["content"]})
+    return conversation
 
-    if not user_id:
+
+def _inject_rag_context(conversation: list[dict], context_chunks: list[str]) -> list[dict]:
+    """
+    Prepend retrieved context chunks to the last user message.
+    """
+    if not context_chunks:
+        return conversation
+
+    context_block = "\n\n---\n".join(context_chunks)
+    context_prefix = (
+        f"The following context was retrieved from relevant documents and research. "
+        f"Use it to inform your response:\n\n{context_block}\n\n---\n\n"
+    )
+
+    result = list(conversation)
+    last = result[-1]
+
+    if isinstance(last["content"], str):
+        result[-1] = {**last, "content": context_prefix + last["content"]}
+    elif isinstance(last["content"], list):
+        # Multimodal message — prepend as a text part
+        result[-1] = {
+            **last,
+            "content": [{"type": "text", "text": context_prefix}] + last["content"]
+        }
+
+    return result
+
+
+async def chat_route(request: Request, user: dict):
+    form = await request.form()
+    session_id = form.get("session_id")
+    user_message = (form.get("message") or "").strip()
+
+    if not session_id or not user_message:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="session_id and message are required"
         )
 
-    sessions = await get_user_sessions(user_id)
+    session = await _get_authorized_session(session_id, user)
 
-    return {"sessions": sessions}
+    history = session["conversations"]["chat"]["history"]
+    conversation = _build_conversation(history, SYSTEM_CHAT)
+    conversation.append({"role": "user", "content": user_message})
 
-
-async def create_session_route(request: Request, user: dict):
-    user_id = user.get("sub")
-
+    # RAG: retrieve relevant chunks from this session's documents
     try:
-        body = await request.json()
-    except Exception:
-        body = {}
+        query_embedding = embed_text(user_message)
+        context_chunks = query_chunks(session_id, query_embedding, n_results=5)
+        conversation = _inject_rag_context(conversation, context_chunks)
+    except Exception as e:
+        print(f"RAG retrieval failed (non-fatal): {e}")
 
-    session_id = str(uuid.uuid4())
+    reply = callGPT(conversation, 0.2)
 
-    first_message = body.get("first_message", "").strip()
-    title = generate_session_title(first_message) if first_message else "New Session"
-
-    session_data = {
-        "session_id": session_id,
-        "user_id":    user_id,
-        "title":      title,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "conversations": {
-            "chat": {
-                "history": []
-            },
-            "analysis": {
-                "history":         [],
-                "analysis_result": None,
-                "file":            None
-            }
-        }
-    }
-
-    await save_session(session_id, session_data)
-
-    return {
-        "message":    "Session created",
-        "session_id": session_id,
-        "title":      title
-    }
+    return PlainTextResponse(reply)
 
 
-async def delete_session_route(request: Request, user: dict):
-    session_id = request.query_params.get("session_id")
-
+async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     if not session_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_id is required"
         )
 
-    session = await get_session(session_id)
+    session = await _get_authorized_session(session_id, user)
 
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
+    raw_files = []
+    if files:
+        for file in files:
+            contents = await file.read()
+            raw_files.append((contents, file.filename))
 
-    if session.get("user_id") != user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+    processed = process_files(raw_files) if raw_files else {"texts": [], "images": [], "errors": []}
 
-    await delete_session(session_id)
-
-    return {"message": "Session deleted"}
-
-
-async def add_message_route(request: Request, user: dict):
-    body = await request.json()
-
-    session_id = body.get("session_id")
-    mode       = body.get("mode")
-    message    = body.get("message")
-
-    if not session_id or not mode or not message:
+    if processed["errors"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id, mode and message are required"
+            detail={"errors": processed["errors"]}
         )
 
-    if mode not in ["chat", "analysis"]:
+    combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
+
+    # RAG: ingest uploaded documents into vector store
+    if combined_text and raw_files:
+        try:
+            for text, (_, filename) in zip(processed["texts"], raw_files):
+                ingest_document(session_id, text, filename)
+        except Exception as e:
+            print(f"RAG ingestion failed (non-fatal): {e}")
+
+    content_parts = []
+    if combined_text:
+        content_parts.append({"type": "text", "text": combined_text})
+
+    for img in processed["images"]:
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}
+        })
+
+    history = session["conversations"]["analysis"]["history"]
+    conversation = _build_conversation(history, SYSTEM_ANALYSIS)
+    user_content = content_parts if content_parts else "No files provided. Please analyze based on conversation history."
+    conversation.append({"role": "user", "content": user_content})
+
+    # RAG: retrieve relevant chunks using the combined text as query
+    try:
+        query_text = combined_text[:1000] if combined_text else "medical analysis"
+        query_embedding = embed_text(query_text)
+        context_chunks = query_chunks(session_id, query_embedding, n_results=5)
+        conversation = _inject_rag_context(conversation, context_chunks)
+    except Exception as e:
+        print(f"RAG retrieval failed (non-fatal): {e}")
+
+    comparison = responseComparison(conversation)
+
+    if "error" in comparison:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="mode must be 'chat' or 'analysis'"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=comparison["error"]
         )
 
-    session = await get_session(session_id)
+    top_papers = get_top_papers(comparison)
 
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
+    # RAG: ingest PubMed papers into vector store for future queries
+    try:
+        ingest_pubmed_papers(session_id, top_papers)
+    except Exception as e:
+        print(f"PubMed RAG ingestion failed (non-fatal): {e}")
 
-    if session.get("user_id") != user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+    final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
 
-    message["timestamp"] = datetime.now(timezone.utc).isoformat()
-    await update_mode_history(session_id, mode, message)
+    if isinstance(final_raw, dict):
+        final = final_raw
+    else:
+        cleaned = re.sub(r"```json|```", "", final_raw).strip()
+        try:
+            final = json.loads(cleaned)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to parse final report"
+            )
 
-    return {"message": "Message added"}
+    report = final.get("report", "")
+    summary = final.get("summary", "")
 
+    buffer = io.BytesIO()
+    generate_pdf(report, buffer)
+    buffer.seek(0)
+    pdf_bytes = buffer.read()
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-async def save_analysis_route(request: Request, user: dict):
-    body = await request.json()
+    filenames = [f for _, f in raw_files]
+    filename = ", ".join(filenames) if filenames else "medical_report.pdf"
+    await set_analysis_result(
+        session_id,
+        {
+            "report": report,
+            "summary": summary,
+            "pdf": pdf_base64
+        },
+        filename
+    )
 
-    session_id = body.get("session_id")
-    result     = body.get("result")
-    filename   = body.get("filename")
+    file_meta = json.dumps({
+        "type": "file",
+        "filename": "medical_report.pdf",
+        "mimetype": "application/pdf",
+        "data": pdf_base64
+    })
 
-    if not session_id or not result or not filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id, result and filename are required"
-        )
-
-    session = await get_session(session_id)
-
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
-
-    if session.get("user_id") != user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
-
-    await set_analysis_result(session_id, result, filename)
-
-    return {"message": "Analysis result saved"}
+    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}")
