@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
+import GradientText from "./GradientText";
 import ChatWindow from "./ChatWindow";
 import ChatInput from "./ChatInput";
 
-export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
+export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinkingChange, onModeChange }) {
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const setThinking = (val) => { setIsThinking(val); onThinkingChange?.(val); };
   const [fileName, setFileName] = useState(null);
   const [mode, setMode] = useState("chat");
   const messagesEndRef = useRef(null);
@@ -49,7 +51,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
     setInputValue("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     setFileName(null);
-    setIsThinking(true);
+    setThinking(true);
 
     try {
       await saveMessage(chat.id, "user", message, mode);
@@ -76,7 +78,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
 
       let streamedMessages = [...newMessages, { content: "", isUser: false, file: null, id: aiMessageId }];
       onUpdateMessages(streamedMessages);
-      setIsThinking(false);
+      setThinking(false);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -101,11 +103,11 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
       if (err.message === "Session expired") return;
       if (err.name === "AbortError") {
         onUpdateMessages(newMessages); // remove the empty AI bubble
-        setIsThinking(false);
+        setThinking(false);
         return;
       }
       onUpdateMessages([...newMessages, { content: "Something went wrong. Please try again.", isUser: false, file: null, id: Date.now() + Math.random() }]);
-      setIsThinking(false);
+      setThinking(false);
     }
   };
 
@@ -127,12 +129,14 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
     <div className="flex-1 flex flex-col items-center p-4 gap-6 h-screen">
       <div className="flex items-center justify-center gap-4 pt-2">
         <img src="/logo.svg" className="w-20 h-20" />
-        <h1
-          className="text-4xl sm:text-4xl lg:text-5xl bg-gradient-to-r from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center"
-          style={{ filter: "drop-shadow(0 0 20px rgba(34,211,238,0.3))" }}
+        <GradientText
+          colors={["#0ea5e9", "#67e8f9", "#0d9488", "#67e8f9", "#0ea5e9"]}
+          animationSpeed={6}
+          showBorder={false}
+          className="text-4xl sm:text-4xl lg:text-5xl font-bold" style={{ fontFamily: "'Outfit', sans-serif" }}
         >
           Welcome to AiMD
-        </h1>
+        </GradientText>
       </div>
 
       <div
@@ -143,18 +147,18 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
           className={`absolute top-1 bottom-1 w-[calc(50%-7px)] rounded-xl transition-all duration-300 ${
             mode === "chat"
               ? "left-1 bg-gradient-to-r from-sky-500/80 to-cyan-500/80"
-              : "left-[calc(50%+3px)] bg-gradient-to-r from-violet-500/80 to-purple-600/80"
+              : "left-[calc(50%+3px)] bg-gradient-to-r from-emerald-500/80 to-teal-600/80"
           }`}
           style={{ backdropFilter: "blur(8px)", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}
         />
         <button
-          onClick={() => setMode("chat")}
+          onClick={() => { setMode("chat"); onModeChange?.(false); }}
           className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "chat" ? "text-white" : "text-white/50 hover:text-white/80"}`}
         >
           💬 Chat
         </button>
         <button
-          onClick={() => setMode("analysis")}
+          onClick={() => { setMode("analysis"); onModeChange?.(true); }}
           className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "analysis" ? "text-white" : "text-white/50 hover:text-white/80"}`}
         >
           🧠 Analysis

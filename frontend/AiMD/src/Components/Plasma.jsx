@@ -90,6 +90,11 @@ export const Plasma = ({
 }) => {
   const containerRef = useRef(null);
   const mousePos = useRef({ x: 0, y: 0 });
+  const programRef = useRef(null);
+  const colorRef = useRef(color);
+
+  // Update color ref when prop changes — doesn't restart the animation
+  useEffect(() => { colorRef.current = color; }, [color]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -132,6 +137,7 @@ export const Plasma = ({
       }
     });
 
+    programRef.current = program;
     const mesh = new Mesh(gl, { geometry, program });
 
     const handleMouseMove = e => {
@@ -164,8 +170,14 @@ export const Plasma = ({
 
     let raf = 0;
     const t0 = performance.now();
+    let currentColor = [...hexToRgb(color)];
     const loop = t => {
       let timeValue = (t - t0) * 0.001;
+      // Smoothly interpolate current color toward target color
+      const targetColor = hexToRgb(colorRef.current);
+      const speed = 0.02;
+      currentColor = currentColor.map((c, i) => c + (targetColor[i] - c) * speed);
+      program.uniforms.uCustomColor.value = new Float32Array(currentColor);
       if (direction === 'pingpong') {
         const pingpongDuration = 10;
         const segmentTime = timeValue % pingpongDuration;
@@ -195,7 +207,7 @@ export const Plasma = ({
         console.warn('Canvas already removed from container');
       }
     };
-  }, [color, speed, direction, scale, opacity, mouseInteractive]);
+  }, [speed, direction, scale, opacity, mouseInteractive]);
 
   return <div ref={containerRef} className="plasma-container" />;
 };
