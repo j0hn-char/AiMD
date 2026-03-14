@@ -9,6 +9,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
   const [mode, setMode] = useState("chat");
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   const scrollToEnd = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToEnd, [chat.messages]);
@@ -59,6 +60,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
       }
 
       const aiMessageId = Date.now() + Math.random();
+      abortControllerRef.current = new AbortController();
       const formData = new FormData();
       formData.append("session_id", chat.id);
       formData.append("message", message);
@@ -69,6 +71,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
+        signal: abortControllerRef.current.signal,
       });
 
       let streamedMessages = [...newMessages, { content: "", isUser: false, file: null, id: aiMessageId }];
@@ -96,8 +99,20 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
       await saveMessage(chat.id, "assistant", fullContent, mode);
     } catch (err) {
       if (err.message === "Session expired") return;
+      if (err.name === "AbortError") {
+        onUpdateMessages(newMessages); // remove the empty AI bubble
+        setIsThinking(false);
+        return;
+      }
       onUpdateMessages([...newMessages, { content: "Something went wrong. Please try again.", isUser: false, file: null, id: Date.now() + Math.random() }]);
       setIsThinking(false);
+    }
+  };
+
+  const cancelMessage = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
   };
 
@@ -162,6 +177,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyPress}
           onSend={sendMessage}
+          onCancel={cancelMessage}
           isThinking={isThinking}
           fileInputRef={fileInputRef}
           fileName={fileName}
