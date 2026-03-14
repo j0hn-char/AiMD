@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import ChatWindow from "./ChatWindow";
 import ChatInput from "./ChatInput";
 
-export default function Chat({ chat, onUpdateMessages, token }) {
+export default function Chat({ chat, onUpdateMessages, token, apiFetch }) {
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [fileName, setFileName] = useState(null);
@@ -15,22 +15,28 @@ export default function Chat({ chat, onUpdateMessages, token }) {
 
   const saveMessage = async (sessionId, role, content, messageMode) => {
     try {
-      await fetch("/api/session/message", {
+      await apiFetch("/api/session/message", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId, mode: messageMode, message: { role, content } }),
       });
-    } catch (err) { console.error("Failed to save message", err); }
+    } catch (err) {
+      if (err.message === "Session expired") throw err;
+      console.error("Failed to save message", err);
+    }
   };
 
   const updateSessionTitle = async (sessionId, title) => {
     try {
-      await fetch("/api/session", {
+      await apiFetch("/api/session", {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId, title }),
       });
-    } catch (err) { console.error("Failed to update session title", err); }
+    } catch (err) {
+      if (err.message === "Session expired") throw err;
+      console.error("Failed to update session title", err);
+    }
   };
 
   const sendMessage = async (file) => {
@@ -44,21 +50,22 @@ export default function Chat({ chat, onUpdateMessages, token }) {
     setFileName(null);
     setIsThinking(true);
 
-    await saveMessage(chat.id, "user", message, mode);
-    if (chat.messages.length === 0) {
-      const title = message.slice(0, 30) + (message.length > 30 ? "..." : "");
-      await updateSessionTitle(chat.id, title);
-    }
-
-    const aiMessageId = Date.now() + Math.random();
     try {
+      await saveMessage(chat.id, "user", message, mode);
+
+      if (chat.messages.length === 0) {
+        const title = message.slice(0, 30) + (message.length > 30 ? "..." : "");
+        await updateSessionTitle(chat.id, title);
+      }
+
+      const aiMessageId = Date.now() + Math.random();
       const formData = new FormData();
       formData.append("session_id", chat.id);
       formData.append("message", message);
       if (file) formData.append("file", file);
 
       const endpoint = mode === "analysis" ? "/api/analysis" : "/api/chat";
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -88,6 +95,7 @@ export default function Chat({ chat, onUpdateMessages, token }) {
       }
       await saveMessage(chat.id, "assistant", fullContent, mode);
     } catch (err) {
+      if (err.message === "Session expired") return;
       onUpdateMessages([...newMessages, { content: "Something went wrong. Please try again.", isUser: false, file: null, id: Date.now() + Math.random() }]);
       setIsThinking(false);
     }
@@ -102,25 +110,19 @@ export default function Chat({ chat, onUpdateMessages, token }) {
 
   return (
     <div className="flex-1 flex flex-col items-center p-4 gap-6 h-screen">
-      {/* Header */}
       <div className="flex items-center justify-center gap-4 pt-2">
         <img src="/logo.svg" className="w-20 h-20" />
         <h1
           className="text-4xl sm:text-4xl lg:text-5xl bg-gradient-to-r from-sky-400 via-cyan-300 to-teal-400 bg-clip-text text-transparent text-center"
-          style={{ filter: 'drop-shadow(0 0 20px rgba(34,211,238,0.3))' }}
+          style={{ filter: "drop-shadow(0 0 20px rgba(34,211,238,0.3))" }}
         >
           Welcome to AiMD
         </h1>
       </div>
 
-      {/* Mode toggle */}
       <div
         className="relative w-72 flex items-center px-1 py-1 rounded-2xl"
-        style={{
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(12px)',
-        }}
+        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(12px)" }}
       >
         <div
           className={`absolute top-1 bottom-1 w-[calc(50%-7px)] rounded-xl transition-all duration-300 ${
@@ -128,33 +130,30 @@ export default function Chat({ chat, onUpdateMessages, token }) {
               ? "left-1 bg-gradient-to-r from-sky-500/80 to-cyan-500/80"
               : "left-[calc(50%+3px)] bg-gradient-to-r from-violet-500/80 to-purple-600/80"
           }`}
-          style={{ backdropFilter: 'blur(8px)', boxShadow: '0 2px 12px rgba(0,0,0,0.3)' }}
+          style={{ backdropFilter: "blur(8px)", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}
         />
         <button
           onClick={() => setMode("chat")}
-          className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2
-            ${mode === "chat" ? "text-white" : "text-white/50 hover:text-white/80"}`}
+          className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "chat" ? "text-white" : "text-white/50 hover:text-white/80"}`}
         >
           💬 Chat
         </button>
         <button
           onClick={() => setMode("analysis")}
-          className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2
-            ${mode === "analysis" ? "text-white" : "text-white/50 hover:text-white/80"}`}
+          className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "analysis" ? "text-white" : "text-white/50 hover:text-white/80"}`}
         >
           🧠 Analysis
         </button>
       </div>
 
-      {/* Chat card */}
       <div
         className="w-full max-w-6xl flex flex-col flex-1 min-h-0 rounded-3xl p-6"
         style={{
-          background: 'rgba(255,255,255,0.04)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)',
+          background: "rgba(255,255,255,0.04)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)",
         }}
       >
         <ChatWindow messages={chat.messages} isThinking={isThinking} messagesEndRef={messagesEndRef} />
