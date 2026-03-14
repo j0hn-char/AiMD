@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./Components/Sidebar";
 import Chat from "./Components/Chat";
@@ -10,8 +10,31 @@ function App() {
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [tokenVerified, setTokenVerified] = useState(false);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("token");
+    setToken(null);
+    setChats([]);
+    setActiveChatId(null);
+  }, []);
+
+  const apiFetch = useCallback(async (url, options = {}) => {
+    const res = await fetch(url, options);
+    if (res.status === 401 || res.status === 403) {
+      handleLogout();
+      throw new Error("Session expired");
+    }
+    return res;
+  }, [handleLogout]);
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem("token");
+    if (!storedToken) setToken(null);
+    setTokenVerified(true);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -31,7 +54,7 @@ function App() {
   const fetchChats = async () => {
     setIsLoadingChats(true);
     try {
-      const res = await fetch("/api/sessions", { headers: authHeaders() });
+      const res = await apiFetch("/api/sessions", { headers: authHeaders() });
       const data = await res.json();
       if (data.sessions && data.sessions.length > 0) {
         const mapped = data.sessions.map((s) => ({
@@ -45,6 +68,7 @@ function App() {
         await createNewChat();
       }
     } catch (err) {
+      if (err.message === "Session expired") return;
       await createNewChat();
     } finally {
       setIsLoadingChats(false);
@@ -53,9 +77,7 @@ function App() {
 
   const loadSessionMessages = async (sessionId) => {
     try {
-      const res = await fetch(`/api/session?session_id=${sessionId}`, {
-        headers: authHeaders(),
-      });
+      const res = await apiFetch(`/api/session?session_id=${sessionId}`, { headers: authHeaders() });
       const data = await res.json();
 
       const chatHistory = data?.conversations?.chat?.history || [];
@@ -63,43 +85,35 @@ function App() {
       const analysisPdf = data?.conversations?.analysis?.analysis_result?.pdf || null;
 
       const chatMessages = chatHistory.map((m, i) => ({
-        id: `chat-${i}`,
-        content: m.content,
-        isUser: m.role === "user",
-        file: null,
-        mode: "chat",
-        timestamp: m.timestamp || ""
+        id: `chat-${i}`, content: m.content, isUser: m.role === "user",
+        file: null, mode: "chat", timestamp: m.timestamp || ""
       }));
 
       const analysisMessages = analysisHistory.map((m, i) => ({
-        id: `analysis-${i}`,
-        content: m.content,
-        isUser: m.role === "user",
+        id: `analysis-${i}`, content: m.content, isUser: m.role === "user",
         file: m.role === "assistant" && analysisPdf ? {
-          type: "file",
-          filename: "medical_report.pdf",
-          mimetype: "application/pdf",
-          data: analysisPdf
+          type: "file", filename: "medical_report.pdf",
+          mimetype: "application/pdf", data: analysisPdf
         } : null,
-        mode: "analysis",
-        timestamp: m.timestamp || ""
+        mode: "analysis", timestamp: m.timestamp || ""
       }));
 
-      const allMessages = [...chatMessages, ...analysisMessages].sort((a, b) => {
-        return new Date(a.timestamp) - new Date(b.timestamp);
-      });
+      const allMessages = [...chatMessages, ...analysisMessages].sort((a, b) =>
+        new Date(a.timestamp) - new Date(b.timestamp)
+      );
 
       setChats((prev) =>
         prev.map((c) => c.id === sessionId ? { ...c, messages: allMessages } : c)
       );
     } catch (err) {
+      if (err.message === "Session expired") return;
       console.error("Failed to load messages", err);
     }
   };
 
   const createNewChat = async () => {
     try {
-      const res = await fetch("/api/session", {
+      const res = await apiFetch("/api/session", {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ title: "New Chat" }),
@@ -110,6 +124,7 @@ function App() {
       setActiveChatId(newChat.id);
       return newChat.id;
     } catch (err) {
+      if (err.message === "Session expired") return;
       const newChat = { id: Date.now().toString(), title: "New Chat", messages: [] };
       setChats((prev) => [newChat, ...prev]);
       setActiveChatId(newChat.id);
@@ -119,11 +134,12 @@ function App() {
 
   const deleteChat = async (id) => {
     try {
-      await fetch(`/api/session?session_id=${id}`, {
+      await apiFetch(`/api/session?session_id=${id}`, {
         method: "DELETE",
         headers: authHeaders(),
       });
     } catch (err) {
+      if (err.message === "Session expired") return;
       console.error("Failed to delete session", err);
     }
     const remaining = chats.filter((c) => c.id !== id);
@@ -155,12 +171,13 @@ function App() {
     setToken(jwt);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    setToken(null);
-    setChats([]);
-    setActiveChatId(null);
-  };
+  if (!tokenVerified) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-indigo-950 flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-white/30 border-t-white rounded-full"></div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
@@ -170,18 +187,11 @@ function App() {
       <Route path="/" element={
         !token ? <Navigate to="/auth" /> : (
           <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-indigo-950 flex"
-            style={{ position: 'relative' }}>
-            {/* Aurora background */}
-            <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-              <Aurora
-                colorStops={["#0c4a6e", "#164e63", "#134e4a"]}
-                blend={0.6}
-                amplitude={0.8}
-                speed={0.6}
-              />
+            style={{ position: "relative" }}>
+            <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
+              <Aurora colorStops={["#0c4a6e", "#164e63", "#134e4a"]} blend={0.6} amplitude={0.8} speed={0.6} />
             </div>
-            {/* Content */}
-            <div style={{ position: 'relative', zIndex: 1, display: 'flex', width: '100%' }}>
+            <div style={{ position: "relative", zIndex: 1, display: "flex", width: "100%" }}>
               <Sidebar
                 chats={chats}
                 activeChatId={activeChatId}
@@ -200,6 +210,7 @@ function App() {
                   chat={activeChat}
                   onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
                   token={token}
+                  apiFetch={apiFetch}
                 />
               ) : null}
             </div>
