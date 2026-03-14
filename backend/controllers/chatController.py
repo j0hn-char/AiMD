@@ -5,9 +5,14 @@ from llm.askAI import callGPT, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 from file_processor import process_files
 from llm.generate_final_report import generate_pdf
-from rag.embedder import embed_text
-from rag.vectorstore import query_chunks
-from rag.ingestion import ingest_document, ingest_pubmed_papers
+try:
+    from rag.embedder import embed_text
+    from rag.vectorstore import query_chunks
+    from rag.ingestion import ingest_document, ingest_pubmed_papers
+    RAG_AVAILABLE = True
+except ImportError:
+    RAG_AVAILABLE = False
+    embed_text = query_chunks = ingest_document = ingest_pubmed_papers = None
 import json
 import re
 import io
@@ -99,6 +104,7 @@ async def chat_route(request: Request, user: dict):
 
     context_chunks = []
     try:
+        if not RAG_AVAILABLE: raise Exception("RAG not available")
         query_embedding = embed_text(user_message)
         context_chunks = query_chunks(session_id, query_embedding, n_results=5)
         conversation = _inject_rag_context(conversation, context_chunks)
@@ -133,6 +139,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     # Ingest uploaded documents into vector store
     if combined_text and raw_files:
         try:
+            if not RAG_AVAILABLE: raise Exception("RAG not available")
             for text, (_, filename) in zip(processed["texts"], raw_files):
                 ingest_document(session_id, text, filename)
         except Exception as e:

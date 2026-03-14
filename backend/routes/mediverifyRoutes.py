@@ -9,7 +9,10 @@ from middleware.verifyJWT import verify_jwt
 import io
 from llm.generate_final_report import generate_pdf
 from src.sessionStorage import get_session, save_session
-from rag.vectorstore import update_chunk_score
+try:
+    from rag.vectorstore import update_chunk_score
+except ImportError:
+    update_chunk_score = lambda *a, **kw: None
 
 
 router = APIRouter()

@@ -1,6 +1,124 @@
 import ReactMarkdown from "react-markdown";
 import { useState } from "react";
 
+
+function Citations({ citations, onFeedback, feedbackSent }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-3" style={{ borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+      {/* Header row */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center justify-between px-3 py-2 cursor-pointer"
+        style={{ background: 'rgba(255,255,255,0.04)' }}
+      >
+        <div className="flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <path d="M2 4h12M4 8h8M6 12h4" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
+            {citations.length} source{citations.length !== 1 ? 's' : ''} used
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Feedback buttons */}
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>helpful?</span>
+          <button
+            onClick={e => { e.stopPropagation(); onFeedback('up'); }}
+            disabled={!!feedbackSent}
+            style={{
+              background: feedbackSent === 'up' ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '5px', padding: '1px 7px', fontSize: '12px',
+              color: feedbackSent === 'up' ? '#6ee7b7' : 'rgba(255,255,255,0.4)',
+              cursor: feedbackSent ? 'default' : 'pointer',
+            }}
+          >↑</button>
+          <button
+            onClick={e => { e.stopPropagation(); onFeedback('down'); }}
+            disabled={!!feedbackSent}
+            style={{
+              background: feedbackSent === 'down' ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '5px', padding: '1px 7px', fontSize: '12px',
+              color: feedbackSent === 'down' ? '#fca5a5' : 'rgba(255,255,255,0.4)',
+              cursor: feedbackSent ? 'default' : 'pointer',
+            }}
+          >↓</button>
+          <svg
+            width="13" height="13" viewBox="0 0 16 16" fill="none"
+            style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+          >
+            <path d="M4 6l4 4 4-4" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      {/* Expanded source list */}
+      {open && (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          {citations.map((c, i) => {
+            const isPubmed = c.source === 'pubmed';
+            const pct = Math.round((c.score || 0) * 100);
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-3 px-3 py-2"
+                style={{
+                  borderBottom: i < citations.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                  background: 'rgba(255,255,255,0.02)',
+                }}
+              >
+                {/* Icon */}
+                <div style={{
+                  width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                  background: isPubmed ? 'rgba(16,185,129,0.12)' : 'rgba(14,165,233,0.12)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {isPubmed ? (
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="8" r="6" stroke="#34d399" strokeWidth="1.2"/>
+                      <path d="M5 8h6M8 5v6" stroke="#34d399" strokeWidth="1.2" strokeLinecap="round"/>
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 2h7l3 3v9H3V2z" stroke="#38bdf8" strokeWidth="1.2"/>
+                      <path d="M10 2v3h3" stroke="#38bdf8" strokeWidth="1.2"/>
+                      <path d="M5 7h6M5 9h4" stroke="#38bdf8" strokeWidth="1.2" strokeLinecap="round"/>
+                    </svg>
+                  )}
+                </div>
+
+                {/* Name + type */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.filename}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>
+                    {isPubmed ? 'PubMed article' : 'Uploaded document'}
+                  </div>
+                </div>
+
+                {/* Relevance bar */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>{pct}%</span>
+                  <div style={{ width: 56, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${pct}%`, height: '100%', borderRadius: 2,
+                      background: isPubmed ? '#34d399' : '#38bdf8',
+                    }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MessageBubble({ msg, token, sessionId }) {
   const [feedbackSent, setFeedbackSent] = useState(null);
 
@@ -61,31 +179,7 @@ export default function MessageBubble({ msg, token, sessionId }) {
         )}
 
         {msg.citations && msg.citations.length > 0 && (
-          <div className="mt-3 flex flex-col gap-1">
-            <p className="text-white/30 text-xs font-semibold uppercase tracking-wide">Sources used</p>
-            {msg.citations.map((c, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-white/50"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <span className="text-cyan-400/70">{c.source === "pubmed" ? "📄 PubMed" : "📎 Upload"}</span>
-                <span className="truncate flex-1">{c.filename}</span>
-                <span className="text-white/30 shrink-0">relevance: {(c.score * 100).toFixed(0)}%</span>
-              </div>
-            ))}
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-white/20 text-xs">Was this helpful?</span>
-              <button
-                onClick={() => sendFeedback("up")}
-                disabled={!!feedbackSent}
-                className={`text-sm transition ${feedbackSent === "up" ? "opacity-100" : "opacity-40 hover:opacity-100"}`}
-              >👍</button>
-              <button
-                onClick={() => sendFeedback("down")}
-                disabled={!!feedbackSent}
-                className={`text-sm transition ${feedbackSent === "down" ? "opacity-100" : "opacity-40 hover:opacity-100"}`}
-              >👎</button>
-              {feedbackSent && <span className="text-white/30 text-xs">Thanks for the feedback!</span>}
-            </div>
-          </div>
+          <Citations citations={msg.citations} onFeedback={sendFeedback} feedbackSent={feedbackSent} />
         )}
       </div>
     );

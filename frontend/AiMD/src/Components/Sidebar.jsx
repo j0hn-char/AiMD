@@ -43,7 +43,7 @@ export default function Sidebar({ chats, activeChatId, onSelect, onNew, onDelete
               items={chats}
               onItemSelect={(chat) => onSelect(chat.id)}
               showGradients
-              enableArrowNavigation
+              enableArrowNavigation={false}
               displayScrollbar={false}
               initialSelectedIndex={chats.findIndex(c => c.id === activeChatId)}
               className="!w-full"
