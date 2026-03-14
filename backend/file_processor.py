@@ -57,10 +57,10 @@ def process_file(contents: bytes, filename: str) -> dict:
                     if page_text:
                         text += page_text + "\n"
         except Exception as e:
-            return {"type": "error", "data": f"Δεν μπόρεσα να ανοίξω το PDF '{filename}': {str(e)}"}
+            return {"type": "error", "data": f"Unable to open the PDF file '{filename}': {str(e)}"}
 
         if len(text.strip()) < 50:
-            return {"type": "error", "data": f"Δεν μπόρεσα να εξάγω κείμενο από το '{filename}'. Δοκίμασε πιο καθαρό αρχείο."}
+            return {"type": "error", "data": f"Unable to export text out of the file '{filename}'"}
 
         return {"type": "text", "data": text, "format": "pdf"}
 
@@ -69,7 +69,7 @@ def process_file(contents: bytes, filename: str) -> dict:
         try:
             image_base64 = base64.standard_b64encode(contents).decode("utf-8")
         except Exception as e:
-            return {"type": "error", "data": f"Δεν μπόρεσα να επεξεργαστώ την εικόνα '{filename}': {str(e)}"}
+            return {"type": "error", "data": f"Unable to process the image '{filename}': {str(e)}"}
 
         media_type = "image/jpeg" if ext in ["jpg", "jpeg"] else "image/png"
         return {"type": "image", "data": image_base64, "media_type": media_type, "format": ext}
@@ -79,7 +79,7 @@ def process_file(contents: bytes, filename: str) -> dict:
         if not DICOM_SUPPORTED:
             return {
                 "type": "error",
-                "data": "Το DICOM δεν υποστηρίζεται. Εγκατάστησε: pip install pydicom Pillow numpy"
+                "data": "The DICOM format is not supported."
             }
         return _process_dicom(contents, filename)
 
@@ -87,8 +87,8 @@ def process_file(contents: bytes, filename: str) -> dict:
     else:
         return {
             "type": "error",
-            "data": f"Μη υποστηριζόμενος τύπος αρχείου: .{ext} — Αποδεκτοί τύποι: PDF, JPG, PNG, DCM"
-        }
+                "data": f"The file type is not supported: .{ext} — Supported types: PDF, JPG, PNG, DCM"
+            }
 
 
 def _process_dicom(contents: bytes, filename: str) -> dict:
@@ -131,7 +131,7 @@ def _process_dicom(contents: bytes, filename: str) -> dict:
         }
 
     except Exception as e:
-        return {"type": "error", "data": f"Δεν μπόρεσα να επεξεργαστώ το DICOM '{filename}': {str(e)}"}
+        return {"type": "error", "data": f"Unable to process the DICOM file '{filename}': {str(e)}"}
 
 
 # ── Multi-file processor ──────────────────────────────────────────────────────

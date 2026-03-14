@@ -2,70 +2,23 @@ import os
 import re
 import json
 import openai
-from google import genai
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 from .prompts import RESPONSE_COMPARISON_PROMPT, FINALIZE_RESPONSE_PROMPT
 
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
+openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))      # Use environment variable for security
 
-openAIclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-
-def callGPT(prompt):
+def callGPT(prompt, temperature):
     response = openAIclient.chat.completions.create(
-        model="gpt-5.1",
-        messages=prompt
+        model="gpt-5.1",       #(analoga to key)
+        messages=prompt,
+        temperature=temperature,      # Lower temperature for more deterministic responses
     )
+    
     return response.choices[0].message.content.strip()
-
-
-def chatbotGemini(conversation: list) -> str:
-    system_instruction = ""
-    for msg in conversation:
-        if msg["role"] == "system":
-            system_instruction = msg["content"]
-            break
-
-    gemini_contents = []
-    for msg in conversation:
-        if msg["role"] == "system":
-            continue
-        role = "user" if msg["role"] == "user" else "model"
-        content = msg["content"]
-
-        if isinstance(content, list):
-            parts = []
-            for part in content:
-                if part.get("type") == "text":
-                    parts.append(genai.types.Part(text=part["text"]))
-                elif part.get("type") == "image_url":
-                    data_url = part["image_url"]["url"]
-                    media_type, b64data = data_url.split(";base64,")
-                    media_type = media_type.replace("data:", "")
-                    parts.append(genai.types.Part(
-                        inline_data=genai.types.Blob(
-                            mime_type=media_type,
-                            data=b64data
-                        )
-                    ))
-            gemini_contents.append(genai.types.Content(role=role, parts=parts))
-        else:
-            gemini_contents.append(genai.types.Content(
-                role=role,
-                parts=[genai.types.Part(text=content)]
-            ))
-
-    response = gemini_client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=gemini_contents,
-        config=genai.types.GenerateContentConfig(
-            system_instruction=system_instruction
-        )
-    )
-    return response.text
+  
 
 
 def responseComparison(conversation):
@@ -74,12 +27,12 @@ def responseComparison(conversation):
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         with ThreadPoolExecutor(max_workers=2) as executor:
-            f1 = executor.submit(callGPT, conversation)
-            f2 = executor.submit(chatbotGemini, conversation)
+            f1 = executor.submit(callGPT, conversation, 0.2)
+            f2 = executor.submit(callGPT, conversation, 0.6)
             response1 = f1.result()
             response2 = f2.result()
 
-        comparisonPrompt = prompt.replace("{DIAGNOSIS_1}", response1).replace("{DIAGNOSIS_2}", response2)
+        comparisonPrompt = prompt.replace("{RESPONSE_1}", response1).replace("{RESPONSE_2}", response2)
 
         result = {
             "consistent": False,
@@ -88,7 +41,7 @@ def responseComparison(conversation):
         }
 
         for parse_attempt in range(3):
-            rawResponse = callGPT([{"role": "user", "content": comparisonPrompt}])
+            rawResponse = callGPT([{"role": "user", "content": comparisonPrompt}], 0.2)
             cleaned = re.sub(r"```json|```", "", rawResponse).strip()
             try:
                 result = json.loads(cleaned)
@@ -107,9 +60,11 @@ def responseComparison(conversation):
 def finalizeResponse(response, topPapers):
     papers_text = ""
     for paper in topPapers:
-        papers_text += f"[{paper['citation']}] {' '.join(paper['text'])}\n\n"
+        chunks = "\n\n".join(paper['text'])
+        papers_text += f"[{paper['citation']}]\n\n{chunks}\n\n"
 
     prompt = FINALIZE_RESPONSE_PROMPT.replace("{DIAGNOSIS}", response).replace("{PAPERS}", papers_text)
 
-    final_response = callGPT([{"role": "user", "content": prompt}])
-    return final_response
+    raw = callGPT([{"role": "user", "content": prompt}], 0.2)
+    cleaned = re.sub(r"```json|```", "", raw).strip()
+    return json.loads(cleaned) 

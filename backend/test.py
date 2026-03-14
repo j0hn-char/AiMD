@@ -22,18 +22,26 @@ conversation.append({"role": "user", "content": userMessage})
 switchIsOn=True #O diakoptis poy kathorizei to epipedo tis analysis, erxete apo frontent
 
 if switchIsOn: 
-    response=responseComparison(conversation)
-    if(response["consistent"]):  
-        top_papers=get_top_papers(response)
-        final_response=finalizeResponse(response["combined_diagnosis"], top_papers)
-        generate_pdf(final_response["report"], "report.pdf")
-        print(final_response["summary"])
-        conversation.append({"role": "assistant", "content": response["summary"]})
+    response = responseComparison(conversation)
+    if "error" in response:
+        print(f"Error: {response['error']}")
+    elif response["consistent"]:  
+        top_papers = get_top_papers(response)
+        if not top_papers:
+            print("No relevant papers found.")
+        else:
+            final_response = finalizeResponse(response["combined_diagnosis"], top_papers)
+            generate_pdf(final_response["report"], "report.pdf")
+            print(final_response["summary"])
+            conversation.append({"role": "assistant", "content": final_response["summary"]})
     else:
-        #error message   
-        print("unable to get a consistant answer, error message sent to user") 
+        print("unable to get a consistent answer, error message sent to user")
 else:
-    small_response=callGPT(conversation)
+    short_conversation = conversation + [{
+        "role": "user",
+        "content": "Answer briefly and in a friendly, simple way. No technical jargon, no long explanations."
+    }]
+    small_response = callGPT(short_conversation, 0.2)
     print(small_response)
     conversation.append({"role": "assistant", "content": small_response})
 

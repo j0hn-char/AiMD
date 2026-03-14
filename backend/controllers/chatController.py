@@ -71,7 +71,7 @@ async def chat_route(request: Request, user: dict):
     conversation = _build_conversation(history, SYSTEM_CHAT)
     conversation.append({"role": "user", "content": user_message})
 
-    reply = callGPT(conversation)
+    reply = callGPT(conversation, 0.2)
 
     return PlainTextResponse(reply)
 
@@ -85,18 +85,13 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     session = await _get_authorized_session(session_id, user)
 
-    if not files:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one file is required"
-        )
-
     raw_files = []
-    for file in files:
-        contents = await file.read()
-        raw_files.append((contents, file.filename))
+    if files:
+        for file in files:
+            contents = await file.read()
+            raw_files.append((contents, file.filename))
 
-    processed = process_files(raw_files)
+    processed = process_files(raw_files) if raw_files else {"texts": [], "images": [], "errors": []}
 
     if processed["errors"]:
         raise HTTPException(
@@ -118,7 +113,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     history = session["conversations"]["analysis"]["history"]
     conversation = _build_conversation(history, SYSTEM_ANALYSIS)
-    conversation.append({"role": "user", "content": content_parts})
+    conversation.append({"role": "user", "content": content_parts if content_parts else "No files provided. Please analyze based on conversation history."})
 
     comparison = responseComparison(conversation)
 
@@ -132,14 +127,17 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
 
-    cleaned = re.sub(r"```json|```", "", final_raw).strip()
-    try:
-        final = json.loads(cleaned)
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to parse final report"
-        )
+    if isinstance(final_raw, dict):
+        final = final_raw
+    else:
+        cleaned = re.sub(r"```json|```", "", final_raw).strip()
+        try:
+            final = json.loads(cleaned)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to parse final report"
+            )
 
     report = final.get("report", "")
     summary = final.get("summary", "")
@@ -151,11 +149,16 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
     filenames = [f for _, f in raw_files]
+    filename = ", ".join(filenames) if filenames else "medical_report.pdf"
     await set_analysis_result(
-        session_id,
-        {"report": report, "summary": summary},
-        ", ".join(filenames)
-    )
+    session_id,
+    {
+        "report": report,
+        "summary": summary,
+        "pdf": pdf_base64  # ← αποθήκευσε το PDF
+    },
+    filename  # ← πάντα έχει τιμή
+)
 
     file_meta = json.dumps({
         "type": "file",

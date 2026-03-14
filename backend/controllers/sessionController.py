@@ -29,7 +29,7 @@ def generate_session_title(first_message: str) -> str:
             "content": first_message
         }
     ]
-    return callGPT(prompt)
+    return callGPT(prompt, 0.2)
 
 
 async def get_session_route(request: Request, user: dict):

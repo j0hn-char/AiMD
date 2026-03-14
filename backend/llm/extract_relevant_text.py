@@ -2,7 +2,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-THRESHOLD = 0.1
+THRESHOLD = 0.2
 
 def split_into_chunks(text, chunk_size=300, overlap=50):
     words = text.split()
@@ -22,12 +22,19 @@ def get_relevant_chunks(ai_diagnosis, papers_list):
         all_chunks.extend(chunks)
         paper_indices.extend([paper_idx] * len(chunks))
 
+    if not all_chunks:
+        return []
+
     vectorizer = TfidfVectorizer()
     all_texts = [ai_diagnosis] + all_chunks
     tfidf_matrix = vectorizer.fit_transform(all_texts)
 
     diagnosis_vec = tfidf_matrix[0]
     chunk_vecs = tfidf_matrix[1:]
+
+    if chunk_vecs.shape[0] == 0:
+        return []
+
     scores = cosine_similarity(diagnosis_vec, chunk_vecs)[0]
 
     chunk_map = {i: [] for i in range(len(papers_list))}
