@@ -101,7 +101,7 @@ export default function AuthPage({ onLogin }) {
               className={`absolute inset-y-1 w-[calc(50%-4px)] rounded-xl transition-all duration-300 ${
                 isLogin
                   ? "left-1 bg-gradient-to-r from-sky-500/80 to-cyan-500/80"
-                  : "left-[calc(50%+3px)] bg-gradient-to-r from-violet-500/80 to-purple-600/80"
+                  : "left-[calc(50%+3px)] bg-gradient-to-r from-emerald-500/80 to-teal-600/80"
               }`}
               style={{ backdropFilter: 'blur(8px)', boxShadow: '0 2px 12px rgba(0,0,0,0.3)' }}
             />
@@ -201,13 +201,17 @@ export default function AuthPage({ onLogin }) {
             disabled={isLoading}
             className="w-full py-3 font-semibold text-white rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: 'linear-gradient(135deg, rgba(14,165,233,0.7), rgba(6,182,212,0.7))',
-              border: '1px solid rgba(34,211,238,0.3)',
+              background: isLogin
+                ? 'linear-gradient(135deg, rgba(14,165,233,0.7), rgba(6,182,212,0.7))'
+                : 'linear-gradient(135deg, rgba(16,185,129,0.8), rgba(13,148,136,0.8))',
+              border: isLogin ? '1px solid rgba(34,211,238,0.3)' : '1px solid rgba(20,184,166,0.3)',
               backdropFilter: 'blur(8px)',
-              boxShadow: '0 4px 20px rgba(6,182,212,0.25), inset 0 1px 0 rgba(255,255,255,0.15)',
+              boxShadow: isLogin
+                ? '0 4px 20px rgba(6,182,212,0.25), inset 0 1px 0 rgba(255,255,255,0.15)'
+                : '0 4px 20px rgba(16,185,129,0.25), inset 0 1px 0 rgba(255,255,255,0.15)',
             }}
-            onMouseEnter={e => !isLoading && (e.target.style.boxShadow = '0 4px 28px rgba(6,182,212,0.45), inset 0 1px 0 rgba(255,255,255,0.2)')}
-            onMouseLeave={e => e.target.style.boxShadow = '0 4px 20px rgba(6,182,212,0.25), inset 0 1px 0 rgba(255,255,255,0.15)'}
+            onMouseEnter={e => !isLoading && (e.currentTarget.style.boxShadow = isLogin ? '0 4px 28px rgba(6,182,212,0.45), inset 0 1px 0 rgba(255,255,255,0.2)' : '0 4px 28px rgba(16,185,129,0.45), inset 0 1px 0 rgba(255,255,255,0.2)')}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = isLogin ? '0 4px 20px rgba(6,182,212,0.25), inset 0 1px 0 rgba(255,255,255,0.15)' : '0 4px 20px rgba(16,185,129,0.25), inset 0 1px 0 rgba(255,255,255,0.15)'}
           >
             {isLoading ? (
               <div className="flex items-center justify-center gap-2">
