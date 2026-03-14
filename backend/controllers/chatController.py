@@ -15,6 +15,7 @@ SYSTEM_CHAT = {
     "content": (
         "You are a helpful and empathetic medical assistant. "
         "Answer the user's questions clearly and ask clarifying questions when needed."
+        "Where appropriate, suggest 1 to 3 follow-up questions the patient could ask you"
         "Answer question ONLY regarding medical interest"
     ),
 }
@@ -50,7 +51,8 @@ async def _get_authorized_session(session_id: str, user: dict) -> dict:
 def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
     conversation = [system_msg]
     for msg in history:
-        conversation.append({"role": msg["role"], "content": msg["content"]})
+        if msg.get("content") is not None:
+            conversation.append({"role": msg["role"], "content": msg["content"]})
     return conversation
 
 
@@ -105,16 +107,28 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     if combined_text:
         content_parts.append({"type": "text", "text": combined_text})
 
+    # AFTER
     for img in processed["images"]:
-        content_parts.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}
-        })
+        if img.get("data") and img.get("media_type"):
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}
+            })
 
     history = session["conversations"]["analysis"]["history"]
     conversation = _build_conversation(history, SYSTEM_ANALYSIS)
-    conversation.append({"role": "user", "content": content_parts if content_parts else "No files provided. Please analyze based on conversation history."})
 
+    if content_parts:
+        user_content = content_parts
+    else:
+        user_content = "No files provided. Please analyze based on conversation history."
+
+    try:
+        json.dumps(conversation)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Malformed conversation payload: {e}")
+
+    conversation.append({"role": "user", "content": user_content})
     comparison = responseComparison(conversation)
 
     if "error" in comparison:
