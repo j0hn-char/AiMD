@@ -21,7 +21,7 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
         onChange={handleFileChange}
       />
 
-      {fileName && mode === "analysis" && (
+      {fileName && (
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-white/60"
           style={{
