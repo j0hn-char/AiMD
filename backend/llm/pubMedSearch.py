@@ -236,11 +236,11 @@ def get_top_papers(ai_diagnosis):
         if not full_text:
             return None
         return {
-            "url":      article["url"],
-            "title":    article["title"],
-            "citation": build_apa_citation(article),
-            "text":     full_text,
-        }
+    "url":        article["url"],
+    "title":      article["title"],
+    "citation":   build_apa_citation(article),
+    "full_text":  full_text,      # string — ξεκάθαρο όνομα
+}
  
     papers = []
     with ThreadPoolExecutor(max_workers=5) as executor:

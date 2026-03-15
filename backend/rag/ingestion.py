@@ -48,23 +48,20 @@ def ingest_document(session_id: str, text: str, filename: str):
 
 
 def ingest_pubmed_papers(session_id: str, papers: list[dict]):
-    """
-    Embed and store PubMed paper abstracts for a session.
-    Each paper should have at least: { "title": str, "abstract": str }
-    """
     texts = []
     metas = []
 
     for paper in papers:
         title = paper.get("title", "")
-        abstract = paper.get("abstract", "")
-        combined = f"{title}\n\n{abstract}".strip()
+        text_chunks = paper.get("text", [])
+        full_text = "\n\n".join(text_chunks) if isinstance(text_chunks, list) else text_chunks
+        combined = f"{title}\n\n{full_text}".strip()
         if combined:
             texts.append(combined)
             metas.append({
                 "source": "pubmed",
                 "title": title,
-                "pmid": str(paper.get("pmid", ""))
+                "url": paper.get("url", "")
             })
 
     if not texts:

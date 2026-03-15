@@ -18,7 +18,7 @@ def get_relevant_chunks(ai_diagnosis, papers_list):
     paper_indices = []
 
     for paper_idx, paper in enumerate(papers_list):
-        chunks = split_into_chunks(paper["text"])
+        chunks = split_into_chunks(paper["full_text"])
         all_chunks.extend(chunks)
         paper_indices.extend([paper_idx] * len(chunks))
 
