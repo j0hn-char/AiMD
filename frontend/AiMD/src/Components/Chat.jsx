@@ -84,9 +84,6 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
       const decoder = new TextDecoder();
       let fullContent = "";
       let attachedFile = null;
-      let citations = null;
-      let entities = null;
-      let displayContent = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -98,24 +95,10 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
           attachedFile = JSON.parse(fullContent.slice(fileStart, fileEnd));
           fullContent = fullContent.slice(fileEnd + 11);
         }
-        let tempContent = fullContent;
-        if (tempContent.includes("__CITATIONS__") && tempContent.includes("__ENDCITATIONS__")) {
-          const citStart = tempContent.indexOf("__CITATIONS__") + 13;
-          const citEnd = tempContent.indexOf("__ENDCITATIONS__");
-          try { citations = JSON.parse(tempContent.slice(citStart, citEnd)); } catch {}
-          tempContent = tempContent.slice(0, tempContent.indexOf("__CITATIONS__")) + tempContent.slice(citEnd + 16);
-        }
-        if (tempContent.includes("__ENTITIES__") && tempContent.includes("__ENDENTITIES__")) {
-          const entStart = tempContent.indexOf("__ENTITIES__") + 12;
-          const entEnd = tempContent.indexOf("__ENDENTITIES__");
-          try { entities = JSON.parse(tempContent.slice(entStart, entEnd)); } catch {}
-          tempContent = tempContent.slice(0, tempContent.indexOf("__ENTITIES__"));
-        }
-        displayContent = tempContent;
-        streamedMessages = [...newMessages, { content: displayContent, isUser: false, file: attachedFile, citations, entities, id: aiMessageId }];
+        streamedMessages = [...newMessages, { content: fullContent, isUser: false, file: attachedFile, id: aiMessageId }];
         onUpdateMessages(streamedMessages);
       }
-      await saveMessage(chat.id, "assistant", displayContent || fullContent, mode);
+      await saveMessage(chat.id, "assistant", fullContent, mode);
     } catch (err) {
       if (err.message === "Session expired") return;
       if (err.name === "AbortError") {
@@ -200,6 +183,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
           onSend={sendMessage}
           onCancel={cancelMessage}
           isThinking={isThinking}
+          mode={mode}
           fileInputRef={fileInputRef}
           fileName={fileName}
           onFileChange={setFileName}
