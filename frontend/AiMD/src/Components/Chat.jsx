@@ -84,6 +84,8 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
       const decoder = new TextDecoder();
       let fullContent = "";
       let attachedFile = null;
+      let citations = null;
+      let displayContent = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -95,10 +97,18 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
           attachedFile = JSON.parse(fullContent.slice(fileStart, fileEnd));
           fullContent = fullContent.slice(fileEnd + 11);
         }
-        streamedMessages = [...newMessages, { content: fullContent, isUser: false, file: attachedFile, id: aiMessageId }];
+        if (fullContent.includes("__CITATIONS__") && fullContent.includes("__ENDCITATIONS__")) {
+          const citStart = fullContent.indexOf("__CITATIONS__") + 13;
+          const citEnd = fullContent.indexOf("__ENDCITATIONS__");
+          try { citations = JSON.parse(fullContent.slice(citStart, citEnd)); } catch {}
+          displayContent = fullContent.slice(0, fullContent.indexOf("__CITATIONS__"));
+        } else {
+          displayContent = fullContent;
+        }
+        streamedMessages = [...newMessages, { content: displayContent, isUser: false, file: attachedFile, citations, id: aiMessageId }];
         onUpdateMessages(streamedMessages);
       }
-      await saveMessage(chat.id, "assistant", fullContent, mode);
+      await saveMessage(chat.id, "assistant", displayContent || fullContent, mode);
     } catch (err) {
       if (err.message === "Session expired") return;
       if (err.name === "AbortError") {

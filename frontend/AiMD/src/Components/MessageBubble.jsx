@@ -1,13 +1,20 @@
 import ReactMarkdown from "react-markdown";
 import { useState } from "react";
 
-
 function Citations({ citations, onFeedback, feedbackSent }) {
   const [open, setOpen] = useState(false);
 
+  const dedupedCitations = Object.values(
+    citations.reduce((acc, c) => {
+      if (!acc[c.filename] || c.score > acc[c.filename].score) {
+        acc[c.filename] = c;
+      }
+      return acc;
+    }, {})
+  );
+
   return (
     <div className="mt-3" style={{ borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-      {/* Header row */}
       <div
         onClick={() => setOpen(o => !o)}
         className="flex items-center justify-between px-3 py-2 cursor-pointer"
@@ -18,11 +25,10 @@ function Citations({ citations, onFeedback, feedbackSent }) {
             <path d="M2 4h12M4 8h8M6 12h4" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
-            {citations.length} source{citations.length !== 1 ? 's' : ''} used
+            {dedupedCitations.length} source{dedupedCitations.length !== 1 ? 's' : ''} used
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Feedback buttons */}
           <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>helpful?</span>
           <button
             onClick={e => { e.stopPropagation(); onFeedback('up'); }}
@@ -55,10 +61,9 @@ function Citations({ citations, onFeedback, feedbackSent }) {
         </div>
       </div>
 
-      {/* Expanded source list */}
       {open && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          {citations.map((c, i) => {
+          {dedupedCitations.map((c, i) => {
             const isPubmed = c.source === 'pubmed';
             const pct = Math.round((c.score || 0) * 100);
             return (
@@ -66,11 +71,10 @@ function Citations({ citations, onFeedback, feedbackSent }) {
                 key={i}
                 className="flex items-center gap-3 px-3 py-2"
                 style={{
-                  borderBottom: i < citations.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                  borderBottom: i < dedupedCitations.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                   background: 'rgba(255,255,255,0.02)',
                 }}
               >
-                {/* Icon */}
                 <div style={{
                   width: 26, height: 26, borderRadius: 6, flexShrink: 0,
                   background: isPubmed ? 'rgba(16,185,129,0.12)' : 'rgba(14,165,233,0.12)',
@@ -89,8 +93,6 @@ function Citations({ citations, onFeedback, feedbackSent }) {
                     </svg>
                   )}
                 </div>
-
-                {/* Name + type */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.filename}
@@ -99,8 +101,6 @@ function Citations({ citations, onFeedback, feedbackSent }) {
                     {isPubmed ? 'PubMed article' : 'Uploaded document'}
                   </div>
                 </div>
-
-                {/* Relevance bar */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
                   <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>{pct}%</span>
                   <div style={{ width: 56, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
@@ -134,6 +134,7 @@ export default function MessageBubble({ msg, token, sessionId }) {
       setFeedbackSent(vote);
     } catch (e) { console.error("Feedback failed", e); }
   };
+
   const downloadFile = (fileData) => {
     const byteChars = atob(fileData.data);
     const byteArray = new Uint8Array([...byteChars].map(c => c.charCodeAt(0)));
@@ -171,8 +172,7 @@ export default function MessageBubble({ msg, token, sessionId }) {
         {msg.file && (
           <button
             onClick={() => downloadFile(msg.file)}
-            className="mt-3 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-600 to-cyan-500
-              hover:opacity-80 text-white text-xs font-semibold rounded-xl transition"
+            className="mt-3 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-600 to-cyan-500 hover:opacity-80 text-white text-xs font-semibold rounded-xl transition"
           >
             ⬇️ Download {msg.file.filename}
           </button>
@@ -187,8 +187,7 @@ export default function MessageBubble({ msg, token, sessionId }) {
 
   return (
     <div className="flex justify-end">
-      <div className="p-3 m-2 rounded-2xl max-w-[70%] break-words
-        bg-gradient-to-r from-sky-600 to-cyan-500 text-white text-right">
+      <div className="p-3 m-2 rounded-2xl max-w-[70%] break-words bg-gradient-to-r from-sky-600 to-cyan-500 text-white text-right">
         <div className="whitespace-pre-wrap">{msg.content}</div>
         {msg.file && (
           <div className="mt-2 pt-2 border-t border-white/20 text-xs opacity-70">

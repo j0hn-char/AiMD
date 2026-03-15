@@ -3,3 +3,4 @@ venv/
 __pycache__/
 sessions.json
 *.pyc
+chroma_db/
