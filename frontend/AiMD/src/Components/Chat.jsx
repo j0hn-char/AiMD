@@ -7,7 +7,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const setThinking = (val) => { setIsThinking(val); onThinkingChange?.(val); };
-  const [fileName, setFileName] = useState(null);
+  const [files, setFiles] = useState([]);
   const [mode, setMode] = useState("chat");
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -42,15 +42,24 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
     }
   };
 
-  const sendMessage = async (file) => {
+  // files είναι πλέον File[] αντί για μεμονωμένο File
+  const sendMessage = async (files = []) => {
     const message = inputValue.trim();
-    if (!message && !file) return;
+    if (!message && files.length === 0) return;
 
-    const newMessages = [...chat.messages, { content: message, isUser: true, file, id: Date.now() + Math.random() }];
+    // Για την εμφάνιση στο chat bubble δείχνουμε τα ονόματα των αρχείων
+    const fileDisplay = files.length > 0
+      ? { name: files.map(f => f.name).join(", ") }
+      : null;
+
+    const newMessages = [
+      ...chat.messages,
+      { content: message, isUser: true, file: fileDisplay, id: Date.now() + Math.random() }
+    ];
     onUpdateMessages(newMessages);
     setInputValue("");
     if (fileInputRef.current) fileInputRef.current.value = "";
-    setFileName(null);
+    setFiles([]);
     setThinking(true);
 
     try {
@@ -63,10 +72,15 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
 
       const aiMessageId = Date.now() + Math.random();
       abortControllerRef.current = new AbortController();
+
       const formData = new FormData();
       formData.append("session_id", chat.id);
       formData.append("message", message);
-      if (file) formData.append("file", file);
+
+      // Προσθέτουμε κάθε αρχείο με το ίδιο key "files" — το FastAPI το διαβάζει ως list
+      for (const file of files) {
+        formData.append("files", file);
+      }
 
       const endpoint = mode === "analysis" ? "/api/analysis" : "/api/chat";
       const res = await apiFetch(endpoint, {
@@ -119,7 +133,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
     } catch (err) {
       if (err.message === "Session expired") return;
       if (err.name === "AbortError") {
-        onUpdateMessages(newMessages); // remove the empty AI bubble
+        onUpdateMessages(newMessages);
         setThinking(false);
         return;
       }
@@ -138,7 +152,8 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const handleKeyPress = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      sendMessage(fileInputRef.current?.files[0] || null);
+      // διαβάζουμε από το state, όχι από το fileInputRef (που είναι ήδη reset)
+      sendMessage(files);
     }
   };
 
@@ -201,8 +216,8 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
           onCancel={cancelMessage}
           isThinking={isThinking}
           fileInputRef={fileInputRef}
-          fileName={fileName}
-          onFileChange={setFileName}
+          files={files}
+          onFileChange={setFiles}
         />
       </div>
     </div>
