@@ -13,6 +13,15 @@ import base64
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+try:
+    from rag.ingestion import ingest_document, ingest_pubmed_papers
+    from rag.embedder import embed_text
+    from rag.vectorstore import query_chunks
+    RAG_AVAILABLE = True
+except ImportError:
+    RAG_AVAILABLE = False
+    print("[WARN] RAG modules not available — running without retrieval")
+
 SYSTEM_CHAT = {
     "role": "system",
     "content": (
@@ -52,19 +61,43 @@ def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
     return conversation
 
 
+def _format_citations(chunks: list[dict]) -> str:
+    if not chunks:
+        return ""
+    return f"__CITATIONS__{json.dumps(chunks)}__ENDCITATIONS__"
+
+
 def _format_entities(entities: dict | None) -> str:
-    """Serialize extracted entities to append to the response stream."""
     if not entities:
         return ""
     return f"__ENTITIES__{json.dumps(entities)}__ENDENTITIES__"
 
 
 def _generate_pdf_bytes(report: str) -> bytes:
-    """Sync helper: render PDF to bytes (για χρήση σε executor)."""
     buffer = io.BytesIO()
     generate_pdf(report, buffer)
     buffer.seek(0)
     return buffer.read()
+
+
+def _inject_rag_context(conversation: list[dict], chunks: list[dict]) -> list[dict]:
+    """Inject retrieved RAG chunks as context into the last user message."""
+    if not chunks:
+        return conversation
+    context_text = "\n\n".join(
+        f"[Source: {c['filename']}]\n{c['text']}" for c in chunks
+    )
+    context_block = f"\n\n---\nRelevant context from documents:\n{context_text}\n---"
+    result = list(conversation)
+    for i in reversed(range(len(result))):
+        if result[i]["role"] == "user":
+            content = result[i]["content"]
+            if isinstance(content, str):
+                result[i] = {**result[i], "content": content + context_block}
+            elif isinstance(content, list):
+                result[i] = {**result[i], "content": content + [{"type": "text", "text": context_block}]}
+            break
+    return result
 
 
 async def chat_route(request: Request, user: dict):
@@ -80,9 +113,21 @@ async def chat_route(request: Request, user: dict):
     conversation = _build_conversation(history, SYSTEM_CHAT)
     conversation.append({"role": "user", "content": user_message})
 
-    reply = chatbotClaude(conversation, 0.2)
+    # RAG retrieval for chat
+    context_chunks = []
+    if RAG_AVAILABLE:
+        try:
+            query_embedding = embed_text(user_message)
+            context_chunks = query_chunks(session_id, query_embedding, n_results=5)
+            if context_chunks:
+                conversation = _inject_rag_context(conversation, context_chunks)
+        except Exception as e:
+            print(f"RAG retrieval failed (non-fatal): {e}")
 
-    return PlainTextResponse(reply)
+    reply = chatbotClaude(conversation, 0.2)
+    citations_str = _format_citations(context_chunks)
+
+    return PlainTextResponse(reply + citations_str)
 
 
 async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
@@ -104,6 +149,15 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
 
+    # Ingest uploaded documents into ChromaDB
+    if RAG_AVAILABLE and combined_text:
+        try:
+            for (_, filename), text in zip(raw_files, processed["texts"]):
+                ingest_document(session_id, text, filename)
+            print(f"[RAG] Ingested {len(processed['texts'])} document(s) into ChromaDB")
+        except Exception as e:
+            print(f"[RAG] Ingestion failed (non-fatal): {e}")
+
     content_parts = []
     if combined_text:
         content_parts.append({"type": "text", "text": combined_text})
@@ -124,7 +178,6 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     loop = asyncio.get_event_loop()
 
-    # ── Βήμα 1: responseComparison + get_top_papers (σειριακά, το 2ο εξαρτάται από το 1ο) ──
     print("[DEBUG] Starting responseComparison...")
     with ThreadPoolExecutor() as pool:
         comparison = await loop.run_in_executor(pool, responseComparison, conversation)
@@ -138,7 +191,25 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         top_papers = await loop.run_in_executor(pool, get_top_papers, comparison)
     print(f"[DEBUG] Top papers: {len(top_papers)}")
 
-    # ── Βήμα 2: finalizeResponse (σύγχρονο, πρέπει να τελειώσει για να πάρουμε report) ──
+    # Ingest PubMed papers into ChromaDB
+    if RAG_AVAILABLE and top_papers:
+        try:
+            ingest_pubmed_papers(session_id, top_papers)
+            print(f"[RAG] Ingested {len(top_papers)} PubMed papers into ChromaDB")
+        except Exception as e:
+            print(f"[RAG] PubMed ingestion failed (non-fatal): {e}")
+
+    # RAG retrieval for analysis context
+    context_chunks = []
+    if RAG_AVAILABLE:
+        try:
+            query_text = comparison.get("combined_diagnosis", combined_text[:500])
+            query_embedding = embed_text(query_text)
+            context_chunks = query_chunks(session_id, query_embedding, n_results=5)
+            print(f"[RAG] Retrieved {len(context_chunks)} chunks for analysis context")
+        except Exception as e:
+            print(f"[RAG] Retrieval failed (non-fatal): {e}")
+
     print("[DEBUG] Finalizing response...")
     with ThreadPoolExecutor() as pool:
         final_raw = await loop.run_in_executor(
@@ -152,19 +223,14 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         try:
             final = json.loads(cleaned)
         except json.JSONDecodeError:
-            print(f"[DEBUG] JSON parse failed. Raw value: {final_raw}")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to parse final report")
 
     report = final.get("report", "")
     summary = final.get("summary", "")
-    print(f"[DEBUG] Report length: {len(report)}, Summary length: {len(summary)}")
 
     if not report and not summary:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Empty report generated")
 
-    # ── Βήμα 3: generate_pdf + extract_entities παράλληλα ──
-    # Και τα δύο παίρνουν ως input το report και είναι ανεξάρτητα μεταξύ τους.
-    # Εξοικονόμηση ~5–15s συνολικά.
     print("[DEBUG] Generating PDF and extracting entities in parallel...")
     with ThreadPoolExecutor() as pool:
         pdf_future      = loop.run_in_executor(pool, _generate_pdf_bytes, report)
@@ -188,6 +254,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         "mimetype": "application/pdf",
         "data": pdf_base64
     })
+    citations_str = _format_citations(context_chunks)
     entities_str = _format_entities(entities)
 
-    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}{entities_str}")
+    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}{citations_str}{entities_str}")
