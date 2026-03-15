@@ -10,6 +10,8 @@ import json
 import re
 import io
 import base64
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 SYSTEM_CHAT = {
     "role": "system",
@@ -55,6 +57,14 @@ def _format_entities(entities: dict | None) -> str:
     if not entities:
         return ""
     return f"__ENTITIES__{json.dumps(entities)}__ENDENTITIES__"
+
+
+def _generate_pdf_bytes(report: str) -> bytes:
+    """Sync helper: render PDF to bytes (για χρήση σε executor)."""
+    buffer = io.BytesIO()
+    generate_pdf(report, buffer)
+    buffer.seek(0)
+    return buffer.read()
 
 
 async def chat_route(request: Request, user: dict):
@@ -112,20 +122,28 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     user_content = content_parts if content_parts else "No files provided. Please analyze based on conversation history."
     conversation.append({"role": "user", "content": user_content})
 
+    loop = asyncio.get_event_loop()
+
+    # ── Βήμα 1: responseComparison + get_top_papers (σειριακά, το 2ο εξαρτάται από το 1ο) ──
     print("[DEBUG] Starting responseComparison...")
-    comparison = responseComparison(conversation)
-    print(f"[DEBUG] Comparison result: {comparison}")
+    with ThreadPoolExecutor() as pool:
+        comparison = await loop.run_in_executor(pool, responseComparison, conversation)
+    print(f"[DEBUG] Comparison done: consistent={comparison.get('consistent')}")
 
     if "error" in comparison:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=comparison["error"])
 
     print("[DEBUG] Fetching top papers...")
-    top_papers = get_top_papers(comparison)
-    print(f"[DEBUG] Top papers count: {len(top_papers)}")
+    with ThreadPoolExecutor() as pool:
+        top_papers = await loop.run_in_executor(pool, get_top_papers, comparison)
+    print(f"[DEBUG] Top papers: {len(top_papers)}")
 
+    # ── Βήμα 2: finalizeResponse (σύγχρονο, πρέπει να τελειώσει για να πάρουμε report) ──
     print("[DEBUG] Finalizing response...")
-    final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
-    print(f"[DEBUG] Final raw type: {type(final_raw)}, value: {str(final_raw)[:200]}")
+    with ThreadPoolExecutor() as pool:
+        final_raw = await loop.run_in_executor(
+            pool, finalizeResponse, comparison["combined_diagnosis"], top_papers
+        )
 
     if isinstance(final_raw, dict):
         final = final_raw
@@ -144,19 +162,32 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     if not report and not summary:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Empty report generated")
 
-    buffer = io.BytesIO()
-    generate_pdf(report, buffer)
-    buffer.seek(0)
-    pdf_bytes = buffer.read()
+    # ── Βήμα 3: generate_pdf + extract_entities παράλληλα ──
+    # Και τα δύο παίρνουν ως input το report και είναι ανεξάρτητα μεταξύ τους.
+    # Εξοικονόμηση ~5–15s συνολικά.
+    print("[DEBUG] Generating PDF and extracting entities in parallel...")
+    with ThreadPoolExecutor() as pool:
+        pdf_future      = loop.run_in_executor(pool, _generate_pdf_bytes, report)
+        entities_future = loop.run_in_executor(pool, extract_entities, report)
+        pdf_bytes, entities = await asyncio.gather(pdf_future, entities_future)
+
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
     filenames = [f for _, f in raw_files]
     filename = ", ".join(filenames) if filenames else "medical_report.pdf"
-    entities = extract_entities(report)
 
-    await set_analysis_result(session_id, {"report": report, "summary": summary, "pdf": pdf_base64, "entities": entities}, filename)
+    await set_analysis_result(
+        session_id,
+        {"report": report, "summary": summary, "pdf": pdf_base64, "entities": entities},
+        filename
+    )
 
-    file_meta = json.dumps({"type": "file", "filename": "medical_report.pdf", "mimetype": "application/pdf", "data": pdf_base64})
+    file_meta = json.dumps({
+        "type": "file",
+        "filename": "medical_report.pdf",
+        "mimetype": "application/pdf",
+        "data": pdf_base64
+    })
     entities_str = _format_entities(entities)
 
     return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}{entities_str}")

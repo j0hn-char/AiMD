@@ -36,11 +36,12 @@ def chatbotClaude(prompt, temperature, max_tokens=1024):
 
 
 def responseComparison(conversation):
-    MAX_ATTEMPTS = 2
+    # Μία μόνο προσπάθεια — αν δεν είναι consistent επιστρέφουμε το αποτέλεσμα ούτως ή άλλως
+    MAX_ATTEMPTS = 1
     prompt = RESPONSE_COMPARISON_PROMPT
-    last_result = None
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
+        # Τα 2 Claude calls τρέχουν παράλληλα
         with ThreadPoolExecutor(max_workers=2) as executor:
             f1 = executor.submit(chatbotClaude, conversation, 0.2)
             f2 = executor.submit(chatbotClaude, conversation, 0.6)
@@ -59,28 +60,18 @@ def responseComparison(conversation):
             "pubmed_keywords": []
         }
 
-        for _ in range(3):
-            rawResponse = chatbotClaude([{"role": "user", "content": comparisonPrompt}], 0.2)
-            cleaned = re.sub(r"```json|```", "", rawResponse).strip()
-            try:
-                result = json.loads(cleaned)
-                break
-            except json.JSONDecodeError:
-                continue
+        # Μία μόνο προσπάθεια JSON parse — αν αποτύχει, συνεχίζουμε με αυτό που έχουμε
+        rawResponse = chatbotClaude([{"role": "user", "content": comparisonPrompt}], 0.2)
+        cleaned = re.sub(r"```json|```", "", rawResponse).strip()
+        try:
+            result = json.loads(cleaned)
+        except json.JSONDecodeError:
+            print(f"[WARN] JSON parse failed on attempt {attempt}, using partial result.")
 
-        if result.get("consistent"):
+        if result.get("consistent") or result.get("combined_diagnosis"):
             return result
 
-        # Κράτα το τελευταίο αποτέλεσμα ακόμα και αν δεν είναι consistent
-        if result.get("combined_diagnosis"):
-            last_result = result
-
-        print(f"[Attempt {attempt}] Diagnoses inconsistent, retrying...")
-
-    # Αντί για error, επέστρεψε το καλύτερο διαθέσιμο αποτέλεσμα
-    if last_result:
-        print("[WARN] Returning best available result despite inconsistency.")
-        return last_result
+        print(f"[Attempt {attempt}] Empty result, giving up.")
 
     return {"error": "Diagnoses remained inconsistent after maximum attempts"}
 
@@ -100,7 +91,7 @@ def finalizeResponse(response, topPapers):
         .replace("{PAPERS}", papers_text)
     )
 
-    # Χρησιμοποιούμε 8192 tokens για να χωράει ολόκληρο το report + summary σε JSON
+    # 8192 tokens για να χωράει ολόκληρο το report + summary σε JSON
     raw = chatbotClaude([{"role": "user", "content": prompt}], 0.2, max_tokens=8192)
     cleaned = re.sub(r"```json|```", "", raw).strip()
 
