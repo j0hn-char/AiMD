@@ -46,6 +46,8 @@ function App() {
 
   useEffect(() => {
     if (!activeChatId || !token) return;
+    const chat = chats.find(c => c.id === activeChatId);
+    if (chat && chat.messages.length > 0) return;
     loadSessionMessages(activeChatId);
   }, [activeChatId]);
 
@@ -192,7 +194,7 @@ function App() {
       } />
       <Route path="/" element={
         !token ? <Navigate to="/auth" /> : (
-          <div className="min-h-screen flex"
+          <div className="h-screen overflow-hidden flex"
             style={{ position: "relative", background: isAnalysis ? "#030d0d" : "#030810", transition: "background 1.5s ease" }}>
             <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
               <Aurora colorStops={isAnalysis ? ["#134e4a", "#064e3b", "#065f46"] : ["#0c4a6e", "#164e63", "#134e4a"]} blend={0.6} amplitude={0.8} speed={0.6} />
