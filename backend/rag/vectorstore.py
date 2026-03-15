@@ -62,16 +62,18 @@ def query_chunks(session_id: str, query_embedding: list[float], n_results: int =
         return []
 
     chunks = []
-    for doc, meta, dist in zip(
+    ids = results.get("ids", [[]])[0]
+    for i, (doc, meta, dist) in enumerate(zip(
         results["documents"][0],
         results["metadatas"][0],
         results["distances"][0]
-    ):
+    )):
         chunks.append({
+            "id": ids[i] if i < len(ids) else str(i),
             "text": doc,
             "source": meta.get("source", "unknown"),
             "filename": meta.get("filename") or meta.get("title", "Unknown source"),
-            "score": round(1 - dist, 3)  # cosine similarity
+            "score": round(1 - dist, 3)
         })
 
     return chunks

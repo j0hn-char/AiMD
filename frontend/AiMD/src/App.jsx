@@ -100,10 +100,11 @@ function App() {
 
       const analysisMessages = analysisHistory.map((m, i) => ({
         id: `analysis-${i}`, content: m.content, isUser: m.role === "user",
-        file: m.role === "assistant" && analysisPdf ? {
-          type: "file", filename: "medical_report.pdf",
-          mimetype: "application/pdf", data: analysisPdf
-        } : null,
+        file: m.role === "assistant" && analysisPdf
+          ? { type: "file", filename: "medical_report.pdf", mimetype: "application/pdf", data: analysisPdf }
+          : m.role === "user" && m.file?.name
+          ? { name: m.file.name }
+          : null,
         citations: m.citations || null,
         entities: m.role === "assistant" ? (m.entities || analysisEntities) : null,
         mode: "analysis", timestamp: m.timestamp || ""

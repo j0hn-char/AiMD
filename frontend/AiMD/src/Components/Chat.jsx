@@ -31,11 +31,12 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const scrollToEnd = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToEnd, [chat.messages]);
 
-  const saveMessage = async (sessionId, role, content, messageMode, citations = null, entities = null) => {
+  const saveMessage = async (sessionId, role, content, messageMode, citations = null, entities = null, file = null) => {
     try {
       const message = { role, content };
       if (citations?.length) message.citations = citations;
       if (entities) message.entities = entities;
+      if (file?.name) message.file = { name: file.name };
       await apiFetch("/api/session/message", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -73,7 +74,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
     setThinking(true);
 
     try {
-      await saveMessage(chat.id, "user", message, mode);
+      await saveMessage(chat.id, "user", message, mode, null, null, fileDisplay);
 
       if (chat.messages.length === 0) {
         const title = message.slice(0, 30) + (message.length > 30 ? "..." : "");

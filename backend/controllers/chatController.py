@@ -66,9 +66,8 @@ def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
 def _format_citations(chunks: list[dict]) -> str:
     if not chunks:
         return ""
-    # ── επιστρέφουμε μόνο τα fields που περιμένει το frontend
     citations = [
-        {"source": c["source"], "filename": c["filename"], "score": c["score"]}
+        {"id": c.get("id", ""), "source": c["source"], "filename": c["filename"], "score": c["score"]}
         for c in chunks
     ]
     return f"__CITATIONS__{json.dumps(citations)}__ENDCITATIONS__"

@@ -232,7 +232,10 @@ export default function MessageBubble({ msg, token, sessionId }) {
 
   const sendFeedback = async (vote) => {
     if (!msg.citations || feedbackSent) return;
-    const chunkIds = msg.citations.map((_, i) => i.toString());
+    const chunkIds = msg.citations
+      .map(c => c.id)
+      .filter(Boolean);
+    if (chunkIds.length === 0) return;
     try {
       await fetch("/api/feedback", {
         method: "POST",
