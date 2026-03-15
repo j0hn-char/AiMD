@@ -59,7 +59,7 @@ FINALIZE_RESPONSE_PROMPT= """You are a medical AI assistant. You will be given a
     - Writes in a clear, clinical tone suitable for a formal medical report
     - Ends with a ## References section listing all cited sources
 
-    "summary" — A concise 3–5 sentence plain-language summary of the report, suitable for display as a chatbot response to the patient or clinician. It should capture the key information, the main supporting evidence, and any notable caveats.
+    "summary" — A concise 3–5 sentence plain-language summary of the report, suitable for display as a chatbot response to the patient or clinician. It should capture the key information, the main supporting evidence, and any notable caveats. Use Markdown formatting to improve readability: **bold** critical terms, diagnoses, and treatments; use *italics* for caveats or qualifications; and use a short bullet list for the key takeaways instead of a single paragraph block.
 
     ---
 
