@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, Request, Response, File, UploadFile, Form, HTTPException
-from typing import List
 from fastapi.responses import StreamingResponse
 from controllers.authController import register, login, logout, RegisterRequest, LoginRequest
 from controllers.refreshController import refresh
@@ -7,8 +6,6 @@ from controllers.sessionController import *
 from controllers.chatController import chat_route, analysis_route
 from controllers.reportController import download_report_route
 from middleware.verifyJWT import verify_jwt
-import io
-from llm.generate_final_report import generate_pdf
 from src.sessionStorage import get_session, save_session
 try:
     from rag.vectorstore import update_chunk_score
@@ -78,6 +75,28 @@ async def add_message(request: Request, user: dict = Depends(verify_jwt)):
 async def save_analysis(request: Request, user: dict = Depends(verify_jwt)):
     return await save_analysis_route(request, user)
 
+@router.get("/session/citations")
+async def get_citations(request: Request, user: dict = Depends(verify_jwt)):
+    session_id = request.query_params.get("session_id")
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    session = await get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.get("user_id") != user.get("sub"):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return {
+        "citations": {
+            "chat":     session["conversations"]["chat"].get("citations", []),
+            "analysis": session["conversations"]["analysis"].get("citations", [])
+        }
+    }
+
 @router.post("/chat")
 async def chat(request: Request, user: dict = Depends(verify_jwt)):
     return await chat_route(request, user)
@@ -86,9 +105,10 @@ async def chat(request: Request, user: dict = Depends(verify_jwt)):
 async def analysis(
     request: Request,
     session_id: str = Form(...),
-    files: List[UploadFile] = File(default=[]),
+    file: UploadFile = File(None),
     user: dict = Depends(verify_jwt)
 ):
+    files = [file] if file else []
     return await analysis_route(user, session_id, files)
 
 @router.get("/download-report/{session_id}")
@@ -99,8 +119,8 @@ async def download_report(session_id: str, user: dict = Depends(verify_jwt)):
 async def feedback(request: Request, user: dict = Depends(verify_jwt)):
     body = await request.json()
     session_id = body.get("session_id")
-    chunk_ids = body.get("chunk_ids", [])
-    vote = body.get("vote")  # "up" or "down"
+    chunk_ids  = body.get("chunk_ids", [])
+    vote       = body.get("vote")
 
     if not session_id or not chunk_ids or vote not in ("up", "down"):
         raise HTTPException(status_code=400, detail="session_id, chunk_ids, and vote (up/down) are required")

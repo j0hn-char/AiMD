@@ -38,11 +38,6 @@ async def delete_session(session_id: str) -> None:
 
 # ── ADD MESSAGE TO HISTORY ────────────────────────────────────────────────────
 async def update_mode_history(session_id: str, mode: str, new_message: dict) -> None:
-    """
-    Adds a message to the correct conversation history based on mode.
-    mode: "chat" or "analysis"
-    new_message: { "role": "user"/"assistant", "content": "...", "timestamp": "..." }
-    """
     field = f"conversations.{mode}.history"
     await sessions_collection.update_one(
         {"session_id": session_id},
@@ -59,8 +54,21 @@ async def set_analysis_result(session_id: str, result: dict, filename: str) -> N
             "uploaded_at": datetime.now(timezone.utc).isoformat()
         }
     }
-
     await sessions_collection.update_one(
         {"session_id": session_id},
         {"$set": update_fields}
+    )
+
+
+# ── SAVE CITATIONS ────────────────────────────────────────────────────────────
+async def save_citations(session_id: str, mode: str, citations: list[dict]) -> None:
+    """
+    Προσθέτει citations στο session.
+    mode: "chat" ή "analysis"
+    citations: λίστα από { text, source, filename, score, timestamp }
+    """
+    field = f"conversations.{mode}.citations"
+    await sessions_collection.update_one(
+        {"session_id": session_id},
+        {"$push": {field: {"$each": citations}}}
     )
