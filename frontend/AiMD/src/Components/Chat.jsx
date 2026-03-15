@@ -8,11 +8,14 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const setThinking = (val) => { setIsThinking(val); onThinkingChange?.(val); };
-  const [fileName, setFileName] = useState(null);
+  const [files, setFiles] = useState([]);
   const [mode, setMode] = useState("chat");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const drawerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   const openDrawer = () => { setDrawerVisible(true); setDrawerOpen(true); };
   const closeDrawer = () => {
@@ -24,9 +27,6 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
     }
     setDrawerOpen(false);
   };
-  const messagesEndRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const abortControllerRef = useRef(null);
 
   const scrollToEnd = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToEnd, [chat.messages]);
@@ -57,15 +57,16 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
     }
   };
 
-  const sendMessage = async (file) => {
+  const sendMessage = async (fileList = []) => {
     const message = inputValue.trim();
-    if (!message && !file) return;
+    if (!message && fileList.length === 0) return;
 
-    const newMessages = [...chat.messages, { content: message, isUser: true, file, id: Date.now() + Math.random() }];
+    const fileDisplay = fileList.length > 0 ? { name: fileList.map(f => f.name).join(", ") } : null;
+    const newMessages = [...chat.messages, { content: message, isUser: true, file: fileDisplay, id: Date.now() + Math.random() }];
     onUpdateMessages(newMessages);
     setInputValue("");
     if (fileInputRef.current) fileInputRef.current.value = "";
-    setFileName(null);
+    setFiles([]);
     setThinking(true);
 
     try {
@@ -81,7 +82,9 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
       const formData = new FormData();
       formData.append("session_id", chat.id);
       formData.append("message", message);
-      if (file) formData.append("file", file);
+      for (const file of fileList) {
+        formData.append("files", file);
+      }
 
       const endpoint = mode === "analysis" ? "/api/analysis" : "/api/chat";
       const res = await apiFetch(endpoint, {
@@ -99,6 +102,9 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
       const decoder = new TextDecoder();
       let fullContent = "";
       let attachedFile = null;
+      let citations = null;
+      let entities = null;
+      let displayContent = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -130,7 +136,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
         streamedMessages = [...newMessages, { content: displayContent, isUser: false, file: attachedFile, citations, entities, id: aiMessageId }];
         onUpdateMessages(streamedMessages);
       }
-      await saveMessage(chat.id, "assistant", fullContent, mode);
+      await saveMessage(chat.id, "assistant", displayContent || fullContent, mode);
     } catch (err) {
       if (err.message === "Session expired") return;
       if (err.name === "AbortError") {
@@ -153,7 +159,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const handleKeyPress = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      sendMessage(fileInputRef.current?.files[0] || null);
+      sendMessage(files);
     }
   };
 
@@ -238,8 +244,8 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
             onCancel={cancelMessage}
             isThinking={isThinking}
             fileInputRef={fileInputRef}
-            fileName={fileName}
-            onFileChange={setFileName}
+            files={files}
+            onFileChange={setFiles}
             mode={mode}
           />
         </div>

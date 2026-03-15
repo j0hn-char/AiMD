@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, Response, File, UploadFile, Form, HTTPException
+from typing import List
 from fastapi.responses import StreamingResponse
 from controllers.authController import register, login, logout, RegisterRequest, LoginRequest
 from controllers.refreshController import refresh
@@ -85,10 +86,9 @@ async def chat(request: Request, user: dict = Depends(verify_jwt)):
 async def analysis(
     request: Request,
     session_id: str = Form(...),
-    file: UploadFile = File(None),
+    files: List[UploadFile] = File(default=[]),
     user: dict = Depends(verify_jwt)
 ):
-    files = [file] if file else []
     return await analysis_route(user, session_id, files)
 
 @router.get("/download-report/{session_id}")

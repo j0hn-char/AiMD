@@ -7,7 +7,7 @@ from src.sessionStorage import (
     update_mode_history,
     set_analysis_result
 )
-from llm.askAI import callGPT
+from llm.askAI import chatbotClaude
 try:
     from rag.vectorstore import delete_collection
 except ImportError:
@@ -33,7 +33,7 @@ def generate_session_title(first_message: str) -> str:
             "content": first_message
         }
     ]
-    return callGPT(prompt, 0.2)
+    return chatbotClaude(prompt, 0.2)
 
 
 async def get_session_route(request: Request, user: dict):

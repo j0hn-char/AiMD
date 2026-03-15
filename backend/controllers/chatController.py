@@ -1,23 +1,17 @@
 from fastapi import HTTPException, Request, status, UploadFile
 from fastapi.responses import PlainTextResponse
 from src.sessionStorage import get_session, update_mode_history, set_analysis_result
-from llm.askAI import callGPT, responseComparison, finalizeResponse
+from llm.askAI import chatbotClaude, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 from file_processor import process_files
 from llm.generate_final_report import generate_pdf
-try:
-    from rag.embedder import embed_text
-    from rag.vectorstore import query_chunks
-    from rag.ingestion import ingest_document, ingest_pubmed_papers
-    RAG_AVAILABLE = True
-except ImportError:
-    RAG_AVAILABLE = False
-    embed_text = query_chunks = ingest_document = ingest_pubmed_papers = None
 from llm.entityExtractor import extract_entities
 import json
 import re
 import io
 import base64
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 SYSTEM_CHAT = {
     "role": "system",
@@ -25,6 +19,8 @@ SYSTEM_CHAT = {
         "You are a helpful and empathetic medical assistant. "
         "Answer the user's questions clearly and ask clarifying questions when needed. "
         "Answer questions ONLY regarding medical interest. "
+        "After your response, suggest 2–3 follow-up questions the patient can ask you "
+        "to better understand their condition, listed under 'You can also ask me:'. "
         "When relevant context is provided below, use it to ground your answer."
     ),
 }
@@ -56,45 +52,19 @@ def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
     return conversation
 
 
-def _inject_rag_context(conversation: list[dict], chunks: list[dict]) -> list[dict]:
-    """Prepend retrieved context chunks to the last user message."""
-    if not chunks:
-        return conversation
-
-    context_block = "\n\n---\n".join(
-        f"[Source: {c['filename']}]\n{c['text']}" for c in chunks
-    )
-    context_prefix = (
-        f"The following context was retrieved from relevant documents and research. "
-        f"Use it to inform your response:\n\n{context_block}\n\n---\n\n"
-    )
-
-    result = list(conversation)
-    last = result[-1]
-    if isinstance(last["content"], str):
-        result[-1] = {**last, "content": context_prefix + last["content"]}
-    elif isinstance(last["content"], list):
-        result[-1] = {**last, "content": [{"type": "text", "text": context_prefix}] + last["content"]}
-
-    return result
-
-
-def _format_citations(chunks: list[dict]) -> str:
-    """Serialize citation metadata to append to the response stream."""
-    if not chunks:
-        return ""
-    citations = [
-        {"source": c["source"], "filename": c["filename"], "score": c["score"]}
-        for c in chunks
-    ]
-    return f"__CITATIONS__{json.dumps(citations)}__ENDCITATIONS__"
-
-
 def _format_entities(entities: dict | None) -> str:
     """Serialize extracted entities to append to the response stream."""
     if not entities:
         return ""
     return f"__ENTITIES__{json.dumps(entities)}__ENDENTITIES__"
+
+
+def _generate_pdf_bytes(report: str) -> bytes:
+    """Sync helper: render PDF to bytes (για χρήση σε executor)."""
+    buffer = io.BytesIO()
+    generate_pdf(report, buffer)
+    buffer.seek(0)
+    return buffer.read()
 
 
 async def chat_route(request: Request, user: dict):
@@ -110,19 +80,9 @@ async def chat_route(request: Request, user: dict):
     conversation = _build_conversation(history, SYSTEM_CHAT)
     conversation.append({"role": "user", "content": user_message})
 
-    context_chunks = []
-    try:
-        if not RAG_AVAILABLE: raise Exception("RAG not available")
-        query_embedding = embed_text(user_message)
-        context_chunks = query_chunks(session_id, query_embedding, n_results=5)
-        conversation = _inject_rag_context(conversation, context_chunks)
-    except Exception as e:
-        print(f"RAG retrieval failed (non-fatal): {e}")
+    reply = chatbotClaude(conversation, 0.2)
 
-    reply = callGPT(conversation, 0.2)
-    citations_str = _format_citations(context_chunks)
-
-    return PlainTextResponse(f"{reply}{citations_str}")
+    return PlainTextResponse(reply)
 
 
 async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
@@ -144,48 +104,46 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
 
-    # Ingest uploaded documents into vector store
-    if combined_text and raw_files:
-        try:
-            if not RAG_AVAILABLE: raise Exception("RAG not available")
-            for text, (_, filename) in zip(processed["texts"], raw_files):
-                ingest_document(session_id, text, filename)
-        except Exception as e:
-            print(f"RAG ingestion failed (non-fatal): {e}")
-
     content_parts = []
     if combined_text:
         content_parts.append({"type": "text", "text": combined_text})
     for img in processed["images"]:
-        content_parts.append({"type": "image_url", "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}})
+        content_parts.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": img["media_type"],
+                "data": img["data"]
+            }
+        })
 
     history = session["conversations"]["analysis"]["history"]
     conversation = _build_conversation(history, SYSTEM_ANALYSIS)
     user_content = content_parts if content_parts else "No files provided. Please analyze based on conversation history."
     conversation.append({"role": "user", "content": user_content})
 
-    context_chunks = []
-    try:
-        query_text = combined_text[:1000] if combined_text else "medical analysis"
-        query_embedding = embed_text(query_text)
-        context_chunks = query_chunks(session_id, query_embedding, n_results=5)
-        conversation = _inject_rag_context(conversation, context_chunks)
-    except Exception as e:
-        print(f"RAG retrieval failed (non-fatal): {e}")
+    loop = asyncio.get_event_loop()
 
-    comparison = responseComparison(conversation)
+    # ── Βήμα 1: responseComparison + get_top_papers (σειριακά, το 2ο εξαρτάται από το 1ο) ──
+    print("[DEBUG] Starting responseComparison...")
+    with ThreadPoolExecutor() as pool:
+        comparison = await loop.run_in_executor(pool, responseComparison, conversation)
+    print(f"[DEBUG] Comparison done: consistent={comparison.get('consistent')}")
 
     if "error" in comparison:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=comparison["error"])
 
-    top_papers = get_top_papers(comparison)
+    print("[DEBUG] Fetching top papers...")
+    with ThreadPoolExecutor() as pool:
+        top_papers = await loop.run_in_executor(pool, get_top_papers, comparison)
+    print(f"[DEBUG] Top papers: {len(top_papers)}")
 
-    try:
-        ingest_pubmed_papers(session_id, top_papers)
-    except Exception as e:
-        print(f"PubMed RAG ingestion failed (non-fatal): {e}")
-
-    final_raw = finalizeResponse(comparison["combined_diagnosis"], top_papers)
+    # ── Βήμα 2: finalizeResponse (σύγχρονο, πρέπει να τελειώσει για να πάρουμε report) ──
+    print("[DEBUG] Finalizing response...")
+    with ThreadPoolExecutor() as pool:
+        final_raw = await loop.run_in_executor(
+            pool, finalizeResponse, comparison["combined_diagnosis"], top_papers
+        )
 
     if isinstance(final_raw, dict):
         final = final_raw
@@ -194,25 +152,42 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         try:
             final = json.loads(cleaned)
         except json.JSONDecodeError:
+            print(f"[DEBUG] JSON parse failed. Raw value: {final_raw}")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to parse final report")
 
     report = final.get("report", "")
     summary = final.get("summary", "")
+    print(f"[DEBUG] Report length: {len(report)}, Summary length: {len(summary)}")
 
-    buffer = io.BytesIO()
-    generate_pdf(report, buffer)
-    buffer.seek(0)
-    pdf_bytes = buffer.read()
+    if not report and not summary:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Empty report generated")
+
+    # ── Βήμα 3: generate_pdf + extract_entities παράλληλα ──
+    # Και τα δύο παίρνουν ως input το report και είναι ανεξάρτητα μεταξύ τους.
+    # Εξοικονόμηση ~5–15s συνολικά.
+    print("[DEBUG] Generating PDF and extracting entities in parallel...")
+    with ThreadPoolExecutor() as pool:
+        pdf_future      = loop.run_in_executor(pool, _generate_pdf_bytes, report)
+        entities_future = loop.run_in_executor(pool, extract_entities, report)
+        pdf_bytes, entities = await asyncio.gather(pdf_future, entities_future)
+
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
     filenames = [f for _, f in raw_files]
     filename = ", ".join(filenames) if filenames else "medical_report.pdf"
-    entities = extract_entities(report)
 
-    await set_analysis_result(session_id, {"report": report, "summary": summary, "pdf": pdf_base64, "entities": entities}, filename)
+    await set_analysis_result(
+        session_id,
+        {"report": report, "summary": summary, "pdf": pdf_base64, "entities": entities},
+        filename
+    )
 
-    file_meta = json.dumps({"type": "file", "filename": "medical_report.pdf", "mimetype": "application/pdf", "data": pdf_base64})
-    citations_str = _format_citations(context_chunks)
+    file_meta = json.dumps({
+        "type": "file",
+        "filename": "medical_report.pdf",
+        "mimetype": "application/pdf",
+        "data": pdf_base64
+    })
     entities_str = _format_entities(entities)
 
-    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}{citations_str}{entities_str}")
+    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}{entities_str}")

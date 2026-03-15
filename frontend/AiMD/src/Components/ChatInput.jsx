@@ -1,15 +1,31 @@
-export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onCancel, isThinking, fileInputRef, fileName, onFileChange, mode }) {
+export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onCancel, isThinking, fileInputRef, files, onFileChange, mode }) {
 
   const handleFileChange = (e) => {
-    onFileChange(e.target.files[0]?.name || null);
+    const newFiles = Array.from(e.target.files || []);
+    if (newFiles.length === 0) return;
+    const existing = Array.isArray(files) ? files : [];
+    const merged = [...existing];
+    for (const f of newFiles) {
+      const duplicate = existing.some(x => x.name === f.name && x.size === f.size);
+      if (!duplicate) merged.push(f);
+    }
+    onFileChange(merged);
+    setTimeout(() => { if (fileInputRef.current) fileInputRef.current.value = ""; }, 0);
+  };
+
+  const removeFile = (indexToRemove) => {
+    const updated = (Array.isArray(files) ? files : []).filter((_, i) => i !== indexToRemove);
+    onFileChange(updated);
   };
 
   const handleSend = () => {
-    const file = fileInputRef.current?.files[0] || null;
-    onSend(file);
-    fileInputRef.current.value = "";
-    onFileChange(null);
+    onSend(Array.isArray(files) ? files : []);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    onFileChange([]);
   };
+
+  const fileList = Array.isArray(files) ? files : [];
+  const hasFiles = fileList.length > 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -18,23 +34,29 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
         ref={fileInputRef}
         className="hidden"
         accept="image/*,.pdf,.txt,.doc,.docx"
+        multiple
         onChange={handleFileChange}
       />
 
-      {fileName && (
-        <div
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-white/60"
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          📎 <span className="truncate flex-1">{fileName}</span>
-          <button
-            onClick={() => { fileInputRef.current.value = ""; onFileChange(null); }}
-            className="text-white/30 hover:text-red-400 transition"
-          >✕</button>
+      {hasFiles && mode === "analysis" && (
+        <div className="flex flex-wrap gap-2">
+          {fileList.map((file, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-white/60"
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              📎 <span className="truncate max-w-40">{file.name}</span>
+              <button
+                onClick={() => removeFile(i)}
+                className="text-white/30 hover:text-red-400 transition"
+              >✕</button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -48,7 +70,7 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(8px)',
           }}
-          onMouseEnter={e => !isThinking && (e.currentTarget.style.borderColor = 'rgba(34,211,238,0.4)')}
+          onMouseEnter={e => !(isThinking || mode !== "analysis") && (e.currentTarget.style.borderColor = 'rgba(34,211,238,0.4)')}
           onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
         >
           🔗
@@ -93,7 +115,7 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
         ) : (
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim() && !fileName}
+            disabled={!inputValue.trim() && !hasFiles}
             className="px-6 py-3 font-semibold text-white rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: 'linear-gradient(135deg, rgba(14,165,233,0.7), rgba(6,182,212,0.7))',

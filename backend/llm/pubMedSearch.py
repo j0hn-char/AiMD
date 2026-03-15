@@ -15,7 +15,8 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 ENTREZ_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EMAIL = os.getenv("EMAIL")
 NCBI_API_KEY = os.getenv("NCBI_API_KEY")  # προαιρετικό, ανεβάζει rate limit σε 10 req/sec
-FETCH_LIMIT = 15  # μειώθηκε από 20 για να αποφύγουμε timeouts
+FETCH_LIMIT = 8    # μειώθηκε για ταχύτητα
+MAX_KEYWORDS = 5   # χρησιμοποιούμε τα 5 πιο σχετικά keywords
  
  
 def make_session() -> requests.Session:
@@ -25,9 +26,12 @@ def make_session() -> requests.Session:
     return session
  
  
-def build_query(keywords: list[str]) -> str:
-    #keywords are combined in a pubMed query string
-    return " OR ".join(f'"{kw}"[MeSH Terms]' for kw in keywords)
+def build_query(keywords: list[str], use_mesh: bool = True) -> str:
+    top = keywords[:MAX_KEYWORDS]
+    if use_mesh:
+        return " OR ".join(f'"{kw}"[MeSH Terms]' for kw in top)
+    # Fallback: titolo/abstract free-text search
+    return " OR ".join(f'"{kw}"[Title/Abstract]' for kw in top)
  
 def search_pubmed(query: str, max_results: int = FETCH_LIMIT) -> list[str]:
     
@@ -213,10 +217,18 @@ def get_top_papers(ai_diagnosis):
     """
     keywords = ai_diagnosis["pubmed_keywords"]
     print(f"Keywords : {keywords}")
-    query = build_query(keywords)
+ 
+    query = build_query(keywords, use_mesh=True)
     print(f"Query    : {query}\n")
  
     pmids = list(dict.fromkeys(search_pubmed(query, max_results=FETCH_LIMIT)))
+ 
+    # Fallback: αν τα MeSH terms δεν έδωσαν αποτελέσματα, δοκιμάζουμε free-text
+    if not pmids:
+        print("MeSH query returned 0 results, trying free-text fallback...")
+        fallback_query = build_query(keywords, use_mesh=False)
+        print(f"Fallback query: {fallback_query}")
+        pmids = list(dict.fromkeys(search_pubmed(fallback_query, max_results=FETCH_LIMIT)))
     if not pmids:
         print("No results found")
         return []
