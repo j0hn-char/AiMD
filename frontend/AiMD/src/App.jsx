@@ -91,7 +91,9 @@ function App() {
 
       const chatMessages = chatHistory.map((m, i) => ({
         id: `chat-${i}`, content: m.content, isUser: m.role === "user",
-        file: null, mode: "chat", timestamp: m.timestamp || ""
+        file: null, mode: "chat", timestamp: m.timestamp || "",
+        citations: m.citations || null,
+        entities: m.entities || null,
       }));
 
       const analysisEntities = data?.conversations?.analysis?.analysis_result?.entities || null;
@@ -102,7 +104,8 @@ function App() {
           type: "file", filename: "medical_report.pdf",
           mimetype: "application/pdf", data: analysisPdf
         } : null,
-        entities: m.role === "assistant" ? analysisEntities : null,
+        citations: m.citations || null,
+        entities: m.role === "assistant" ? (m.entities || analysisEntities) : null,
         mode: "analysis", timestamp: m.timestamp || ""
       }));
 

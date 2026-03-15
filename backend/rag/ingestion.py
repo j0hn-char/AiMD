@@ -57,8 +57,11 @@ def ingest_pubmed_papers(session_id: str, papers: list[dict]):
 
     for paper in papers:
         title = paper.get("title", "")
-        abstract = paper.get("abstract", "")
-        combined = f"{title}\n\n{abstract}".strip()
+        # PubMed papers store full text in "text" field (list of chunks or string)
+        text_field = paper.get("text", paper.get("abstract", ""))
+        if isinstance(text_field, list):
+            text_field = "\n\n".join(text_field)
+        combined = f"{title}\n\n{text_field}".strip()
         if combined:
             texts.append(combined)
             metas.append({
