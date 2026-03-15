@@ -40,24 +40,15 @@ async def get_session_route(request: Request, user: dict):
     session_id = request.query_params.get("session_id")
 
     if not session_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id is required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="session_id is required")
 
     session = await get_session(session_id)
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     if session.get("user_id") != user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     return {
         "session_id":      session["session_id"],
@@ -65,7 +56,11 @@ async def get_session_route(request: Request, user: dict):
         "created_at":      session.get("created_at"),
         "conversations":   session["conversations"],
         "analysis_result": session["conversations"]["analysis"].get("analysis_result"),
-        "file":            session["conversations"]["analysis"].get("file")
+        "file":            session["conversations"]["analysis"].get("file"),
+        "citations": {
+            "chat":     session["conversations"]["chat"].get("citations", []),
+            "analysis": session["conversations"]["analysis"].get("citations", [])
+        }
     }
 
 
@@ -73,13 +68,9 @@ async def get_user_sessions_route(request: Request, user: dict):
     user_id = user.get("sub")
 
     if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     sessions = await get_user_sessions(user_id)
-
     return {"sessions": sessions}
 
 
@@ -103,10 +94,12 @@ async def create_session_route(request: Request, user: dict):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "conversations": {
             "chat": {
-                "history": []
+                "history":   [],
+                "citations": []
             },
             "analysis": {
                 "history":         [],
+                "citations":       [],
                 "analysis_result": None,
                 "file":            None
             }
@@ -126,28 +119,18 @@ async def delete_session_route(request: Request, user: dict):
     session_id = request.query_params.get("session_id")
 
     if not session_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id is required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="session_id is required")
 
     session = await get_session(session_id)
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     if session.get("user_id") != user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     await delete_session(session_id)
 
-    # Clean up RAG vector store for this session
     try:
         delete_collection(session_id)
     except Exception as e:
@@ -164,30 +147,18 @@ async def add_message_route(request: Request, user: dict):
     message    = body.get("message")
 
     if not session_id or not mode or not message:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id, mode and message are required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="session_id, mode and message are required")
 
     if mode not in ["chat", "analysis"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="mode must be 'chat' or 'analysis'"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mode must be 'chat' or 'analysis'")
 
     session = await get_session(session_id)
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     if session.get("user_id") != user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     message["timestamp"] = datetime.now(timezone.utc).isoformat()
     await update_mode_history(session_id, mode, message)
@@ -203,24 +174,15 @@ async def save_analysis_route(request: Request, user: dict):
     filename   = body.get("filename")
 
     if not session_id or not result or not filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id, result and filename are required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="session_id, result and filename are required")
 
     session = await get_session(session_id)
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     if session.get("user_id") != user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     await set_analysis_result(session_id, result, filename)
 
