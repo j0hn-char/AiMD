@@ -1,5 +1,5 @@
 from file_processor import process_file
-from llm.askAI import callGPT, responseComparison, finalizeResponse
+from llm.askAI import chatbotClaude, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 from llm.generate_final_report import generate_pdf
 
@@ -41,7 +41,7 @@ else:
         "role": "user",
         "content": "Answer briefly and in a friendly, simple way. No technical jargon, no long explanations."
     }]
-    small_response = callGPT(short_conversation, 0.2)
+    small_response = chatbotClaude(short_conversation, 0.2)
     print(small_response)
     conversation.append({"role": "assistant", "content": small_response})
 

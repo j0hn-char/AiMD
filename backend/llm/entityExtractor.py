@@ -1,4 +1,4 @@
-from llm.askAI import callGPT
+from llm.askAI import chatbotClaude
 import json
 import re
 
@@ -22,7 +22,7 @@ SYSTEM_ENTITY = {
 
 def extract_entities(text: str) -> dict | None:
     """
-    Extract medical entities from a text using GPT.
+    Extract medical entities from a text using Claude.
     Returns a dict with conditions, symptoms, medications, lab_values, recommendations.
     Returns None if extraction fails.
     """
@@ -34,7 +34,7 @@ def extract_entities(text: str) -> dict | None:
             SYSTEM_ENTITY,
             {"role": "user", "content": f"Extract medical entities from this text:\n\n{text[:3000]}"}
         ]
-        raw = callGPT(conversation, 0.0)
+        raw = chatbotClaude(conversation, 0.0)
         cleaned = re.sub(r"```json|```", "", raw).strip()
         return json.loads(cleaned)
     except Exception as e:
