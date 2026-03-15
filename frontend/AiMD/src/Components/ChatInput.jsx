@@ -1,4 +1,4 @@
-export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onCancel, isThinking, fileInputRef, fileName, onFileChange }) {
+export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onCancel, isThinking, fileInputRef, fileName, onFileChange, mode }) {
 
   const handleFileChange = (e) => {
     onFileChange(e.target.files[0]?.name || null);
@@ -21,7 +21,7 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
         onChange={handleFileChange}
       />
 
-      {fileName && (
+      {fileName && mode === "analysis" && (
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-white/60"
           style={{
@@ -41,7 +41,7 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
       <div className="flex flex-col sm:flex-row gap-3">
         <button
           onClick={() => fileInputRef.current.click()}
-          disabled={isThinking}
+          disabled={isThinking || mode !== "analysis"}
           className="px-4 py-3 rounded-2xl text-white/50 hover:text-white transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
             background: 'rgba(255,255,255,0.06)',
