@@ -10,27 +10,41 @@ RESPONSE_COMPARISON_PROMPT =  (
     "Compare the two responses and reply only with a valid JSON object in the following format:\n\n"
     "{\n"
     '  "consistent": <true if the two responses convey roughly the same information and conclusions, false otherwise>,\n'
-    '  "combined_diagnosis": "<a single, coherent, professional medical response that merges the key points of both texts into one unified answer>",\n'
-    '  "pubmed_keywords": ["<keyword1>", "<keyword2>", "<keyword3>", ...]\n'
+    '  "combined_diagnosis": "<a single, coherent, professional medical response that merges the key points of both texts into one unified answer>"\n'
     "}\n\n"
     "Rules:\n"
     "* Do not include any text outside the JSON object.\n"
     "* Do NOT wrap the response in markdown code blocks or backticks.\n"
     "* Set `consistent` to `true` only if the two responses are in substantial agreement.\n"
-    "* The `combined_response` should be a clean, professional medical text that integrates "
+    "* The `combined_diagnosis` should be a clean, professional medical text that integrates "
     "both responses without contradictions. If they are inconsistent, still produce a combined "
     "text that clearly notes where they differ.\n"
-    "* The `pubmed_keywords` field must contain 5 to 10 VALID PubMed MeSH terms, ALWAYS written in English "
-    "regardless of the language of the input or responses. "
-    "These must be SPECIFIC to the actual condition described — never generic terms like "
-    "'normal reference values', 'hematologic parameters', or 'cardiopulmonary abnormalities'. "
-    "Use exact MeSH headings (e.g. 'Pneumonia, Pneumococcal', 'Bronchitis', 'C-Reactive Protein', "
-    "'Anti-Bacterial Agents', 'Influenza, Human'). "
-    "Include the primary diagnosis/condition, key pathogens if relevant, main symptoms, "
-    "first-line treatments, and diagnostic tests mentioned in the responses.\n"
+    "* The `combined_diagnosis` must be written in the same language as the input responses.\n"
     "* Always maintain a clinical, evidence-based tone regardless of the type of question.\n"
-    "* If the question is not strictly a diagnosis but a general medical inquiry, adapt the `combined_response` "
+    "* If the question is not strictly a diagnosis but a general medical inquiry, adapt the `combined_diagnosis` "
     "accordingly (e.g. an explanation, a recommendation, a comparison of treatment options, etc.)."
+)
+
+TRANSLATE_TO_ENGLISH_PROMPT = (
+    "Translate the following medical text to English. "
+    "Reply ONLY with the translated text, nothing else.\n\n"
+    "Text: {TEXT}"
+)
+
+KEYWORD_EXTRACTION_PROMPT = (
+    "You are a medical AI assistant. You will be given a medical text in English. "
+    "Your task is to extract PubMed search keywords from it.\n\n"
+    "Medical Text: {TEXT}\n\n"
+    "Reply ONLY with a valid JSON object in the following format:\n"
+    '{"pubmed_keywords": ["<keyword1>", "<keyword2>", ...]}\n\n'
+    "Rules:\n"
+    "* Do not include any text outside the JSON object.\n"
+    "* Do NOT wrap the response in markdown code blocks or backticks.\n"
+    "* Always write keywords in English.\n"
+    "* Include 5 to 10 precise MeSH terms covering conditions, pathogens, symptoms, treatments, and diagnostic methods.\n"
+    "* Use exact MeSH headings (e.g. 'Pneumonia, Pneumococcal', 'Bronchitis', 'C-Reactive Protein', "
+    "'Anti-Bacterial Agents', 'Influenza, Human').\n"
+    "* Never use generic terms like 'normal reference values' or 'hematologic parameters'.\n"
 )
 
 FINALIZE_RESPONSE_PROMPT= """You are a medical AI assistant. You will be given a medical response (which may be a diagnosis, an answer to a medical question, a treatment explanation, or any other medical topic) and a set of excerpts from scientific papers, each accompanied by its citation.
@@ -42,12 +56,15 @@ FINALIZE_RESPONSE_PROMPT= """You are a medical AI assistant. You will be given a
     {PAPERS}
     (Each entry in PAPERS follows the format: [Citation] Excerpt text)
 
+    IMPORTANT: Detect the language of the Medical Response and write both the "report" and "summary" in that same language.
+    The ONLY exception is medical terms where standard practice requires English (e.g. Latin/English medical terminology).
+
     Your task is to produce a JSON object with exactly two keys: "report" and "summary".
 
     ---
 
-    "report" — A complete, well-structured medical report in Markdown format that:
-    - Opens with a title (e.g., # Medical Report) and a table of contents
+    "report" — A complete, well-structured medical report in Markdown format, written in the same language as the Medical Response, that:
+    - Opens with a title and a table of contents
     - Is organized into clearly labeled sections with headings and subheadings, such as:
     ## 1. Overview
     ## 2. Clinical Findings / Key Information
@@ -55,16 +72,16 @@ FINALIZE_RESPONSE_PROMPT= """You are a medical AI assistant. You will be given a
     ### 3.1 ...
     ## 4. Discrepancies or Limitations (if any)
     ## 5. Conclusion
-    - Adapts the section titles to fit the nature of the medical response (e.g. if it is a treatment question, "Clinical Findings" may become "Treatment Options")
+    - Adapts the section titles to fit the nature of the medical response and the detected language
     - Presents the medical response as the central claim
     - Weaves in the provided paper excerpts to support, confirm, or elaborate on the response wherever relevant
     - Places the citation immediately after each use of a paper excerpt in inline format, e.g.: "...viral bronchitis is typically self-limiting (Smith et al., 2021)."
     - Only uses the provided excerpts — do not cite or invent any external sources
     - If a paper excerpt does not support the response, acknowledges the discrepancy briefly rather than forcing a false confirmation
     - Writes in a clear, clinical tone suitable for a formal medical report
-    - Ends with a ## References section listing all cited sources
+    - Ends with a References section listing all cited sources
 
-    "summary" — A concise 3–5 sentence plain-language summary of the report, suitable for display as a chatbot response to the patient or clinician. It should capture the key information, the main supporting evidence, and any notable caveats. Use Markdown formatting to improve readability: **bold** critical terms, diagnoses, and treatments; use *italics* for caveats or qualifications; and use a short bullet list for the key takeaways instead of a single paragraph block.
+    "summary" — A concise 3–5 sentence plain-language summary of the report, written in the same language as the Medical Response, suitable for display as a chatbot response to the patient or clinician. It should capture the key information, the main supporting evidence, and any notable caveats. Use Markdown formatting to improve readability: **bold** critical terms, diagnoses, and treatments; use *italics* for caveats or qualifications; and use a short bullet list for the key takeaways instead of a single paragraph block.
 
     ---
 

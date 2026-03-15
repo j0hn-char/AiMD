@@ -4,7 +4,7 @@ import json
 import anthropic
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
-from .prompts import RESPONSE_COMPARISON_PROMPT, FINALIZE_RESPONSE_PROMPT
+from .prompts import RESPONSE_COMPARISON_PROMPT, FINALIZE_RESPONSE_PROMPT, TRANSLATE_TO_ENGLISH_PROMPT, KEYWORD_EXTRACTION_PROMPT
 
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -35,8 +35,29 @@ def chatbotClaude(prompt, temperature, max_tokens=1024):
     return response.content[0].text.strip()
 
 
+def extractKeywords(combined_diagnosis):
+    # Step 1: Translate to English first to ensure keywords are always in English
+    translate_prompt = TRANSLATE_TO_ENGLISH_PROMPT.replace("{TEXT}", combined_diagnosis)
+    english_text = chatbotClaude([{"role": "user", "content": translate_prompt}], 0.1)
+
+    # Step 2: Extract keywords from the English text
+    keyword_prompt = KEYWORD_EXTRACTION_PROMPT.replace("{TEXT}", english_text)
+    for _ in range(3):
+        raw = chatbotClaude([{"role": "user", "content": keyword_prompt}], 0.2)
+        cleaned = re.sub(r"```json|```", "", raw).strip()
+        try:
+            result = json.loads(cleaned)
+            return result.get("pubmed_keywords", [])
+        except json.JSONDecodeError:
+            continue
+    return []
+
+
 def responseComparison(conversation):
     prompt = RESPONSE_COMPARISON_PROMPT
+
+    # Βγάλε το system message από το conversation για να το περάσεις στο comparison
+    system_msg = next((m for m in conversation if m["role"] == "system"), None)
 
     # Τα 2 Claude calls τρέχουν παράλληλα
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -51,6 +72,12 @@ def responseComparison(conversation):
         .replace("{RESPONSE_2}", response2)
     )
 
+    # Περνάς το system message και στο comparison call ώστε να ξέρει τη γλώσσα
+    comparison_messages = []
+    if system_msg:
+        comparison_messages.append(system_msg)
+    comparison_messages.append({"role": "user", "content": comparisonPrompt})
+
     result = {
         "consistent": False,
         "combined_diagnosis": "",
@@ -59,7 +86,7 @@ def responseComparison(conversation):
 
     # Έως 2 προσπάθειες JSON parse
     for _ in range(2):
-        rawResponse = chatbotClaude([{"role": "user", "content": comparisonPrompt}], 0.2)
+        rawResponse = chatbotClaude(comparison_messages, 0.2)
         cleaned = re.sub(r"```json|```", "", rawResponse).strip()
         try:
             result = json.loads(cleaned)
@@ -71,6 +98,8 @@ def responseComparison(conversation):
     if result.get("combined_diagnosis"):
         if not result.get("consistent"):
             print("[WARN] Responses inconsistent, returning best available result.")
+        # Extract keywords separately via translation to guarantee English output
+        result["pubmed_keywords"] = extractKeywords(result["combined_diagnosis"])
         return result
 
     return {"error": "Diagnoses remained inconsistent after maximum attempts"}
