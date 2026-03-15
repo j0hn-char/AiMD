@@ -35,12 +35,12 @@ def chatbotClaude(prompt, temperature, max_tokens=1024):
     return response.content[0].text.strip()
 
 
-def extractKeywords(combined_diagnosis):
-    # Step 1: Translate to English first to ensure keywords are always in English
-    translate_prompt = TRANSLATE_TO_ENGLISH_PROMPT.replace("{TEXT}", combined_diagnosis)
-    english_text = chatbotClaude([{"role": "user", "content": translate_prompt}], 0.1)
+def translateToEnglish(text):
+    prompt = TRANSLATE_TO_ENGLISH_PROMPT.replace("{TEXT}", text)
+    return chatbotClaude([{"role": "user", "content": prompt}], 0.1)
 
-    # Step 2: Extract keywords from the English text
+
+def extractKeywords(english_text):
     keyword_prompt = KEYWORD_EXTRACTION_PROMPT.replace("{TEXT}", english_text)
     for _ in range(3):
         raw = chatbotClaude([{"role": "user", "content": keyword_prompt}], 0.2)
@@ -98,8 +98,11 @@ def responseComparison(conversation):
     if result.get("combined_diagnosis"):
         if not result.get("consistent"):
             print("[WARN] Responses inconsistent, returning best available result.")
-        # Extract keywords separately via translation to guarantee English output
-        result["pubmed_keywords"] = extractKeywords(result["combined_diagnosis"])
+
+        # Μετάφρασε στα αγγλικά για χρήση στο TF-IDF similarity και keyword extraction
+        english_text = translateToEnglish(result["combined_diagnosis"])
+        result["combined_diagnosis_en"] = english_text
+        result["pubmed_keywords"] = extractKeywords(english_text)
         return result
 
     return {"error": "Diagnoses remained inconsistent after maximum attempts"}

@@ -34,6 +34,7 @@ def build_query(keywords: list[str]) -> str:
 
     return " OR ".join(f'"{kw}"[MeSH Terms]' for kw in ascii_keywords)
 
+
 def search_pubmed(query: str, max_results: int = FETCH_LIMIT) -> list[str]:
     
     #Searches in pubMed and returns the PMIDs (sorted by relevance by NCBI)
@@ -170,7 +171,8 @@ def build_apa_citation(article: dict) -> str:
         f" https://doi.org/{article['doi']}" if article["doi"] else f" {article['url']}",
     ]
     return "".join(parts)
- 
+
+
 def fetch_full_text(pmcid: str) -> str | None:
     params = {
         "db":      "pmc",
@@ -264,7 +266,10 @@ def get_top_papers(ai_diagnosis):
         print("No open access articles found. Skipping relevance ranking.")
         return []
 
-    return get_relevant_chunks(ai_diagnosis["combined_diagnosis"], papers)
+    # Χρησιμοποίησε το αγγλικό κείμενο για το TF-IDF similarity ώστε να δουλεύει
+    # σωστά ανεξάρτητα από τη γλώσσα του χρήστη
+    diagnosis_for_search = ai_diagnosis.get("combined_diagnosis_en") or ai_diagnosis["combined_diagnosis"]
+    return get_relevant_chunks(diagnosis_for_search, papers)
  
 # ── Entry point ────────────────────────────────────────────────────────────────
  
