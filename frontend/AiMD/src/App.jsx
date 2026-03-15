@@ -46,6 +46,8 @@ function App() {
 
   useEffect(() => {
     if (!activeChatId || !token) return;
+    const chat = chats.find(c => c.id === activeChatId);
+    if (chat && chat.messages.length > 0) return;
     loadSessionMessages(activeChatId);
   }, [activeChatId]);
 
@@ -89,9 +91,7 @@ function App() {
 
       const chatMessages = chatHistory.map((m, i) => ({
         id: `chat-${i}`, content: m.content, isUser: m.role === "user",
-        file: null, mode: "chat", timestamp: m.timestamp || "",
-        citations: m.citations || null,
-        entities: m.entities || null,
+        file: null, mode: "chat", timestamp: m.timestamp || ""
       }));
 
       const analysisEntities = data?.conversations?.analysis?.analysis_result?.entities || null;
@@ -102,8 +102,7 @@ function App() {
           type: "file", filename: "medical_report.pdf",
           mimetype: "application/pdf", data: analysisPdf
         } : null,
-        citations: m.citations || null,
-        entities: m.role === "assistant" ? (m.entities || analysisEntities) : null,
+        entities: m.role === "assistant" ? analysisEntities : null,
         mode: "analysis", timestamp: m.timestamp || ""
       }));
 

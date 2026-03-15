@@ -31,15 +31,12 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const scrollToEnd = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToEnd, [chat.messages]);
 
-  const saveMessage = async (sessionId, role, content, messageMode, citations = null, entities = null) => {
+  const saveMessage = async (sessionId, role, content, messageMode) => {
     try {
-      const message = { role, content };
-      if (citations) message.citations = citations;
-      if (entities) message.entities = entities;
       await apiFetch("/api/session/message", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, mode: messageMode, message }),
+        body: JSON.stringify({ session_id: sessionId, mode: messageMode, message: { role, content } }),
       });
     } catch (err) {
       if (err.message === "Session expired") throw err;
@@ -139,7 +136,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
         streamedMessages = [...newMessages, { content: displayContent, isUser: false, file: attachedFile, citations, entities, id: aiMessageId }];
         onUpdateMessages(streamedMessages);
       }
-      await saveMessage(chat.id, "assistant", displayContent || fullContent, mode, citations, entities);
+      await saveMessage(chat.id, "assistant", displayContent || fullContent, mode);
     } catch (err) {
       if (err.message === "Session expired") return;
       if (err.name === "AbortError") {
