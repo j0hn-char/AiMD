@@ -1,6 +1,114 @@
 import ReactMarkdown from "react-markdown";
 import { useState } from "react";
 
+
+function EntityArtifacts({ entities }) {
+  const [open, setOpen] = useState(true);
+
+  const sections = [
+    { key: "conditions", label: "Conditions", color: "#f87171", bg: "rgba(248,113,113,0.1)" },
+    { key: "symptoms", label: "Symptoms", color: "#fb923c", bg: "rgba(251,146,60,0.1)" },
+    { key: "medications", label: "Medications", color: "#a78bfa", bg: "rgba(167,139,250,0.1)" },
+    { key: "lab_values", label: "Lab values", color: "#38bdf8", bg: "rgba(56,189,248,0.1)" },
+    { key: "recommendations", label: "Recommendations", color: "#34d399", bg: "rgba(52,211,153,0.1)" },
+  ].filter(s => entities[s.key]?.length > 0);
+
+  if (sections.length === 0) return null;
+
+  const severityColor = (s) => {
+    if (!s) return "rgba(255,255,255,0.3)";
+    if (s === "severe" || s === "critical" || s === "abnormal") return "#f87171";
+    if (s === "moderate") return "#fb923c";
+    return "#34d399";
+  };
+
+  return (
+    <div className="mt-3" style={{ borderRadius: "10px", border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center justify-between px-3 py-2 cursor-pointer"
+        style={{ background: "rgba(255,255,255,0.04)" }}
+      >
+        <div className="flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="2" width="5" height="5" rx="1" stroke="rgba(255,255,255,0.4)" strokeWidth="1.3"/>
+            <rect x="9" y="2" width="5" height="5" rx="1" stroke="rgba(255,255,255,0.4)" strokeWidth="1.3"/>
+            <rect x="2" y="9" width="5" height="5" rx="1" stroke="rgba(255,255,255,0.4)" strokeWidth="1.3"/>
+            <rect x="9" y="9" width="5" height="5" rx="1" stroke="rgba(255,255,255,0.4)" strokeWidth="1.3"/>
+          </svg>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", fontWeight: 500 }}>
+            Knowledge artifacts
+          </span>
+        </div>
+        <svg
+          width="13" height="13" viewBox="0 0 16 16" fill="none"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+        >
+          <path d="M4 6l4 4 4-4" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+
+      {open && (
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {sections.map(({ key, label, color, bg }) => (
+              <div key={key}>
+                <div style={{ fontSize: "11px", fontWeight: 500, color: color, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {label}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {key === "recommendations" ? (
+                    entities[key].map((r, i) => (
+                      <div key={i} style={{
+                        fontSize: "12px", color: "rgba(255,255,255,0.6)", padding: "5px 10px",
+                        borderRadius: 6, background: bg, border: `1px solid ${color}30`,
+                        lineHeight: 1.4, width: "100%"
+                      }}>
+                        {r}
+                      </div>
+                    ))
+                  ) : key === "lab_values" ? (
+                    entities[key].map((item, i) => (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+                        borderRadius: 6, background: bg, border: `1px solid ${color}30`,
+                      }}>
+                        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>{item.name}</span>
+                        {item.value && <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>{item.value}</span>}
+                        {item.status && (
+                          <span style={{ fontSize: "10px", fontWeight: 500, color: severityColor(item.status) }}>
+                            {item.status}
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    entities[key].map((item, i) => (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
+                        borderRadius: 6, background: bg, border: `1px solid ${color}30`,
+                      }}>
+                        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>
+                          {item.name || item}
+                        </span>
+                        {(item.severity || item.dosage) && (
+                          <span style={{ fontSize: "10px", fontWeight: 500, color: severityColor(item.severity) }}>
+                            {item.severity || item.dosage}
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Citations({ citations, onFeedback, feedbackSent }) {
   const [open, setOpen] = useState(false);
 
@@ -178,6 +286,9 @@ export default function MessageBubble({ msg, token, sessionId }) {
           </button>
         )}
 
+        {msg.entities && (
+          <EntityArtifacts entities={msg.entities} />
+        )}
         {msg.citations && msg.citations.length > 0 && (
           <Citations citations={msg.citations} onFeedback={sendFeedback} feedbackSent={feedbackSent} />
         )}

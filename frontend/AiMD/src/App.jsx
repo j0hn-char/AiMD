@@ -92,12 +92,15 @@ function App() {
         file: null, mode: "chat", timestamp: m.timestamp || ""
       }));
 
+      const analysisEntities = data?.conversations?.analysis?.analysis_result?.entities || null;
+
       const analysisMessages = analysisHistory.map((m, i) => ({
         id: `analysis-${i}`, content: m.content, isUser: m.role === "user",
         file: m.role === "assistant" && analysisPdf ? {
           type: "file", filename: "medical_report.pdf",
           mimetype: "application/pdf", data: analysisPdf
         } : null,
+        entities: m.role === "assistant" ? analysisEntities : null,
         mode: "analysis", timestamp: m.timestamp || ""
       }));
 

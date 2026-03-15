@@ -13,6 +13,7 @@ try:
 except ImportError:
     RAG_AVAILABLE = False
     embed_text = query_chunks = ingest_document = ingest_pubmed_papers = None
+from llm.entityExtractor import extract_entities
 import json
 import re
 import io
@@ -87,6 +88,13 @@ def _format_citations(chunks: list[dict]) -> str:
         for c in chunks
     ]
     return f"__CITATIONS__{json.dumps(citations)}__ENDCITATIONS__"
+
+
+def _format_entities(entities: dict | None) -> str:
+    """Serialize extracted entities to append to the response stream."""
+    if not entities:
+        return ""
+    return f"__ENTITIES__{json.dumps(entities)}__ENDENTITIES__"
 
 
 async def chat_route(request: Request, user: dict):
@@ -199,9 +207,12 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     filenames = [f for _, f in raw_files]
     filename = ", ".join(filenames) if filenames else "medical_report.pdf"
-    await set_analysis_result(session_id, {"report": report, "summary": summary, "pdf": pdf_base64}, filename)
+    entities = extract_entities(report)
+
+    await set_analysis_result(session_id, {"report": report, "summary": summary, "pdf": pdf_base64, "entities": entities}, filename)
 
     file_meta = json.dumps({"type": "file", "filename": "medical_report.pdf", "mimetype": "application/pdf", "data": pdf_base64})
     citations_str = _format_citations(context_chunks)
+    entities_str = _format_entities(entities)
 
-    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}{citations_str}")
+    return PlainTextResponse(f"__FILE__{file_meta}__ENDFILE__\n{summary}{citations_str}{entities_str}")

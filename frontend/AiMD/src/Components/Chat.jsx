@@ -85,6 +85,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
       let fullContent = "";
       let attachedFile = null;
       let citations = null;
+      let entities = null;
       let displayContent = "";
 
       while (true) {
@@ -97,15 +98,21 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
           attachedFile = JSON.parse(fullContent.slice(fileStart, fileEnd));
           fullContent = fullContent.slice(fileEnd + 11);
         }
-        if (fullContent.includes("__CITATIONS__") && fullContent.includes("__ENDCITATIONS__")) {
-          const citStart = fullContent.indexOf("__CITATIONS__") + 13;
-          const citEnd = fullContent.indexOf("__ENDCITATIONS__");
-          try { citations = JSON.parse(fullContent.slice(citStart, citEnd)); } catch {}
-          displayContent = fullContent.slice(0, fullContent.indexOf("__CITATIONS__"));
-        } else {
-          displayContent = fullContent;
+        let tempContent = fullContent;
+        if (tempContent.includes("__CITATIONS__") && tempContent.includes("__ENDCITATIONS__")) {
+          const citStart = tempContent.indexOf("__CITATIONS__") + 13;
+          const citEnd = tempContent.indexOf("__ENDCITATIONS__");
+          try { citations = JSON.parse(tempContent.slice(citStart, citEnd)); } catch {}
+          tempContent = tempContent.slice(0, tempContent.indexOf("__CITATIONS__")) + tempContent.slice(citEnd + 16);
         }
-        streamedMessages = [...newMessages, { content: displayContent, isUser: false, file: attachedFile, citations, id: aiMessageId }];
+        if (tempContent.includes("__ENTITIES__") && tempContent.includes("__ENDENTITIES__")) {
+          const entStart = tempContent.indexOf("__ENTITIES__") + 12;
+          const entEnd = tempContent.indexOf("__ENDENTITIES__");
+          try { entities = JSON.parse(tempContent.slice(entStart, entEnd)); } catch {}
+          tempContent = tempContent.slice(0, tempContent.indexOf("__ENTITIES__"));
+        }
+        displayContent = tempContent;
+        streamedMessages = [...newMessages, { content: displayContent, isUser: false, file: attachedFile, citations, entities, id: aiMessageId }];
         onUpdateMessages(streamedMessages);
       }
       await saveMessage(chat.id, "assistant", displayContent || fullContent, mode);
