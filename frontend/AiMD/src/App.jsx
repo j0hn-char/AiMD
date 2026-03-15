@@ -10,12 +10,15 @@ function App() {
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
+  const [isAnalysis, setIsAnalysis] = useState(false);
   const [tokenVerified, setTokenVerified] = useState(false);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
+    localStorage.removeItem("userEmail");
     setToken(null);
     setChats([]);
     setActiveChatId(null);
@@ -89,12 +92,15 @@ function App() {
         file: null, mode: "chat", timestamp: m.timestamp || ""
       }));
 
+      const analysisEntities = data?.conversations?.analysis?.analysis_result?.entities || null;
+
       const analysisMessages = analysisHistory.map((m, i) => ({
         id: `analysis-${i}`, content: m.content, isUser: m.role === "user",
         file: m.role === "assistant" && analysisPdf ? {
           type: "file", filename: "medical_report.pdf",
           mimetype: "application/pdf", data: analysisPdf
         } : null,
+        entities: m.role === "assistant" ? analysisEntities : null,
         mode: "analysis", timestamp: m.timestamp || ""
       }));
 
@@ -186,10 +192,10 @@ function App() {
       } />
       <Route path="/" element={
         !token ? <Navigate to="/auth" /> : (
-          <div className="min-h-screen bg-gradient-to-br from-cyan-950 via-slate-950 to-indigo-950 flex"
-            style={{ position: "relative" }}>
+          <div className="min-h-screen flex"
+            style={{ position: "relative", background: isAnalysis ? "#030d0d" : "#030810", transition: "background 1.5s ease" }}>
             <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-              <Aurora colorStops={["#0c4a6e", "#164e63", "#134e4a"]} blend={0.6} amplitude={0.8} speed={0.6} />
+              <Aurora colorStops={isAnalysis ? ["#134e4a", "#064e3b", "#065f46"] : ["#0c4a6e", "#164e63", "#134e4a"]} blend={0.6} amplitude={0.8} speed={0.6} />
             </div>
             <div style={{ position: "relative", zIndex: 1, display: "flex", width: "100%" }}>
               <Sidebar
@@ -198,6 +204,7 @@ function App() {
                 onSelect={setActiveChatId}
                 onNew={createNewChat}
                 onDelete={deleteChat}
+                userEmail={localStorage.getItem('userEmail')}
                 onLogout={handleLogout}
               />
               {isLoadingChats ? (
@@ -211,6 +218,8 @@ function App() {
                   onUpdateMessages={(messages) => updateChat(activeChatId, messages)}
                   token={token}
                   apiFetch={apiFetch}
+                  onThinkingChange={setIsThinking}
+                  onModeChange={setIsAnalysis}
                 />
               ) : null}
             </div>

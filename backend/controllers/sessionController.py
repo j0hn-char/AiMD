@@ -8,6 +8,10 @@ from src.sessionStorage import (
     set_analysis_result
 )
 from llm.askAI import callGPT
+try:
+    from rag.vectorstore import delete_collection
+except ImportError:
+    delete_collection = lambda session_id: None
 import uuid
 from datetime import datetime, timezone
 
@@ -142,6 +146,12 @@ async def delete_session_route(request: Request, user: dict):
         )
 
     await delete_session(session_id)
+
+    # Clean up RAG vector store for this session
+    try:
+        delete_collection(session_id)
+    except Exception as e:
+        print(f"RAG cleanup failed (non-fatal): {e}")
 
     return {"message": "Session deleted"}
 

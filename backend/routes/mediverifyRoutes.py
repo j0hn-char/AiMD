@@ -9,6 +9,10 @@ from middleware.verifyJWT import verify_jwt
 import io
 from llm.generate_final_report import generate_pdf
 from src.sessionStorage import get_session, save_session
+try:
+    from rag.vectorstore import update_chunk_score
+except ImportError:
+    update_chunk_score = lambda *a, **kw: None
 
 
 router = APIRouter()
@@ -90,6 +94,24 @@ async def analysis(
 @router.get("/download-report/{session_id}")
 async def download_report(session_id: str, user: dict = Depends(verify_jwt)):
     return await download_report_route(session_id, user)
+
+@router.post("/feedback")
+async def feedback(request: Request, user: dict = Depends(verify_jwt)):
+    body = await request.json()
+    session_id = body.get("session_id")
+    chunk_ids = body.get("chunk_ids", [])
+    vote = body.get("vote")  # "up" or "down"
+
+    if not session_id or not chunk_ids or vote not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="session_id, chunk_ids, and vote (up/down) are required")
+
+    session = await get_session(session_id)
+    if not session or session.get("user_id") != user.get("sub"):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    delta = 0.1 if vote == "up" else -0.1
+    update_chunk_score(session_id, chunk_ids, delta)
+    return {"message": "Feedback recorded"}
 
 # ── HEALTH CHECK ──────────────────────────────────────────────
 @router.get("/")

@@ -1,7 +1,7 @@
 import MessageBubble from "./MessageBubble";
 import ThinkingBubble from "./ThinkingBubble";
 
-export default function ChatWindow({ messages = [], isThinking, messagesEndRef }) {
+export default function ChatWindow({ messages = [], isThinking, messagesEndRef, token, sessionId }) {
   return (
     <div
       className="flex-1 min-h-0 overflow-y-auto mb-6 p-4 rounded-2xl"
@@ -17,7 +17,7 @@ export default function ChatWindow({ messages = [], isThinking, messagesEndRef }
         </div>
       )}
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} msg={msg} />
+        <MessageBubble key={msg.id} msg={msg} token={token} sessionId={sessionId} />
       ))}
       {isThinking && <ThinkingBubble />}
       <div ref={messagesEndRef}></div>

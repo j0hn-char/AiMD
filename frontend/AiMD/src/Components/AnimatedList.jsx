@@ -57,6 +57,8 @@ const AnimatedList = ({
   useEffect(() => {
     if (!enableArrowNavigation) return;
     const handleKeyDown = e => {
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
       if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
         e.preventDefault();
         setKeyboardNav(true);
