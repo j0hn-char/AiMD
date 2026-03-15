@@ -1,11 +1,12 @@
 from fastapi import HTTPException, Request, status, UploadFile
 from fastapi.responses import PlainTextResponse
-from src.sessionStorage import get_session, update_mode_history, set_analysis_result
+from src.sessionStorage import get_session, update_mode_history, set_analysis_result, save_citations
 from llm.askAI import chatbotClaude, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 from file_processor import process_files
 from llm.generate_final_report import generate_pdf
 from llm.entityExtractor import extract_entities
+from datetime import datetime, timezone
 import json
 import re
 import io
@@ -64,7 +65,12 @@ def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
 def _format_citations(chunks: list[dict]) -> str:
     if not chunks:
         return ""
-    return f"__CITATIONS__{json.dumps(chunks)}__ENDCITATIONS__"
+    # ── επιστρέφουμε μόνο τα fields που περιμένει το frontend
+    citations = [
+        {"source": c["source"], "filename": c["filename"], "score": c["score"]}
+        for c in chunks
+    ]
+    return f"__CITATIONS__{json.dumps(citations)}__ENDCITATIONS__"
 
 
 def _format_entities(entities: dict | None) -> str:
@@ -113,21 +119,30 @@ async def chat_route(request: Request, user: dict):
     conversation = _build_conversation(history, SYSTEM_CHAT)
     conversation.append({"role": "user", "content": user_message})
 
-    # RAG retrieval for chat
     context_chunks = []
     if RAG_AVAILABLE:
         try:
             query_embedding = embed_text(user_message)
             context_chunks = query_chunks(session_id, query_embedding, n_results=5)
+            print(f"[DIAG] RAG_AVAILABLE: {RAG_AVAILABLE}")
+            print(f"[DIAG] context_chunks count: {len(context_chunks)}")
+            print(f"[DIAG] context_chunks: {context_chunks}")
             if context_chunks:
                 conversation = _inject_rag_context(conversation, context_chunks)
         except Exception as e:
-            print(f"RAG retrieval failed (non-fatal): {e}")
+            print(f"[DIAG] RAG exception: {e}")
+    else:
+        print("[DIAG] RAG not available — skipping")
 
     reply = chatbotClaude(conversation, 0.2)
+    
     citations_str = _format_citations(context_chunks)
+    print(f"[DIAG] citations_str: '{citations_str}'")
+    
+    final_response = reply + citations_str
+    print(f"[DIAG] final_response tail: '{final_response[-200:]}'")
 
-    return PlainTextResponse(reply + citations_str)
+    return PlainTextResponse(final_response)
 
 
 async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
@@ -149,7 +164,6 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
 
-    # Ingest uploaded documents into ChromaDB
     if RAG_AVAILABLE and combined_text:
         try:
             for (_, filename), text in zip(raw_files, processed["texts"]):
@@ -191,7 +205,6 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         top_papers = await loop.run_in_executor(pool, get_top_papers, comparison)
     print(f"[DEBUG] Top papers: {len(top_papers)}")
 
-    # Ingest PubMed papers into ChromaDB
     if RAG_AVAILABLE and top_papers:
         try:
             ingest_pubmed_papers(session_id, top_papers)
@@ -199,7 +212,6 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         except Exception as e:
             print(f"[RAG] PubMed ingestion failed (non-fatal): {e}")
 
-    # RAG retrieval for analysis context
     context_chunks = []
     if RAG_AVAILABLE:
         try:
@@ -241,6 +253,15 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     filenames = [f for _, f in raw_files]
     filename = ", ".join(filenames) if filenames else "medical_report.pdf"
+
+    if context_chunks:
+        try:
+            await save_citations(session_id, "analysis", [
+                {**chunk, "timestamp": datetime.now(timezone.utc).isoformat()}
+                for chunk in context_chunks
+            ])
+        except Exception as e:
+            print(f"[Citations] Save failed (non-fatal): {e}")
 
     await set_analysis_result(
         session_id,
