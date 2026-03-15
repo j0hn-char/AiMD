@@ -1,30 +1,25 @@
-from openai import OpenAI
-import os
+from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
 
-_client = None
+_ef = None
 
-def get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    return _client
+def get_embedding_function():
+    global _ef
+    if _ef is None:
+        # Built-in στο chromadb, δεν χρειάζεται κανένα άλλο package
+        # Χρησιμοποιεί το all-MiniLM-L6-v2 μέσω onnxruntime (~50MB, κατεβαίνει μια φορά)
+        _ef = DefaultEmbeddingFunction()
+    return _ef
 
 
 def embed_text(text: str) -> list[float]:
     """Embed a single string."""
-    response = get_client().embeddings.create(
-        model="text-embedding-3-small",
-        input=text
-    )
-    return response.data[0].embedding
+    ef = get_embedding_function()
+    return ef([text])[0].tolist()
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embed multiple strings in a single API call (more efficient)."""
+    """Embed multiple strings (batch)."""
     if not texts:
         return []
-    response = get_client().embeddings.create(
-        model="text-embedding-3-small",
-        input=texts
-    )
-    return [item.embedding for item in response.data]
+    ef = get_embedding_function()
+    return [e.tolist() for e in ef(texts)]
