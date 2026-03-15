@@ -1,12 +1,11 @@
 from fastapi import HTTPException, Request, status, UploadFile
 from fastapi.responses import PlainTextResponse
-from src.sessionStorage import get_session, update_mode_history, set_analysis_result, save_citations
+from src.sessionStorage import get_session, update_mode_history, set_analysis_result
 from llm.askAI import chatbotClaude, responseComparison, finalizeResponse
 from llm.pubMedSearch import get_top_papers
 from file_processor import process_files
 from llm.generate_final_report import generate_pdf
 from llm.entityExtractor import extract_entities
-from datetime import datetime, timezone
 import json
 import re
 import io
@@ -31,7 +30,8 @@ SYSTEM_CHAT = {
         "Answer questions ONLY regarding medical interest. "
         "After your response, suggest 2–3 follow-up questions the patient can ask you "
         "to better understand their condition, listed under 'You can also ask me:'. "
-        "When relevant context is provided below, use it to ground your answer."
+        "When relevant context is provided below, use it to ground your answer. "
+        "Always respond in the same language as the user's input."
     ),
 }
 
@@ -66,11 +66,7 @@ def _build_conversation(history: list[dict], system_msg: dict) -> list[dict]:
 def _format_citations(chunks: list[dict]) -> str:
     if not chunks:
         return ""
-    citations = [
-        {"id": c.get("id", ""), "source": c["source"], "filename": c["filename"], "score": c["score"]}
-        for c in chunks
-    ]
-    return f"__CITATIONS__{json.dumps(citations)}__ENDCITATIONS__"
+    return f"__CITATIONS__{json.dumps(chunks)}__ENDCITATIONS__"
 
 
 def _format_entities(entities: dict | None) -> str:
@@ -106,6 +102,56 @@ def _inject_rag_context(conversation: list[dict], chunks: list[dict]) -> list[di
     return result
 
 
+def _build_chat_system_with_analysis(session: dict) -> dict:
+    """
+    Build the chat system prompt, injecting analysis summary and entities
+    from MongoDB if available — works even after server restarts.
+    """
+    analysis_result = session.get("conversations", {}).get("analysis", {}).get("analysis_result") or {}
+    summary = analysis_result.get("summary", "")
+    entities = analysis_result.get("entities") or {}
+
+    system_content = SYSTEM_CHAT["content"]
+
+    if summary:
+        system_content += (
+            "\n\nThe user has previously submitted medical documents for analysis. "
+            "Here is the analysis summary — use it to answer follow-up questions:\n\n"
+            f"{summary}"
+        )
+
+    if entities:
+        # Flatten entities into a concise context string
+        entity_lines = []
+        if entities.get("conditions"):
+            names = ", ".join(e.get("name", e) if isinstance(e, dict) else e for e in entities["conditions"])
+            entity_lines.append(f"Conditions: {names}")
+        if entities.get("symptoms"):
+            names = ", ".join(e.get("name", e) if isinstance(e, dict) else e for e in entities["symptoms"])
+            entity_lines.append(f"Symptoms: {names}")
+        if entities.get("medications"):
+            names = ", ".join(e.get("name", e) if isinstance(e, dict) else e for e in entities["medications"])
+            entity_lines.append(f"Medications: {names}")
+        if entities.get("lab_values"):
+            names = ", ".join(
+                f"{e.get('name', '')} {e.get('value', '')} ({e.get('status', '')})"
+                if isinstance(e, dict) else e
+                for e in entities["lab_values"]
+            )
+            entity_lines.append(f"Lab values: {names}")
+        if entities.get("recommendations"):
+            recs = "; ".join(entities["recommendations"])
+            entity_lines.append(f"Recommendations: {recs}")
+
+        if entity_lines:
+            system_content += (
+                "\n\nExtracted medical entities from the analysis:\n"
+                + "\n".join(entity_lines)
+            )
+
+    return {"role": "system", "content": system_content}
+
+
 async def chat_route(request: Request, user: dict):
     form = await request.form()
     session_id = form.get("session_id")
@@ -115,34 +161,29 @@ async def chat_route(request: Request, user: dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="session_id and message are required")
 
     session = await _get_authorized_session(session_id, user)
+
+    # Build system prompt with analysis context from MongoDB
+    system_msg = _build_chat_system_with_analysis(session)
+
     history = session["conversations"]["chat"]["history"]
-    conversation = _build_conversation(history, SYSTEM_CHAT)
+    conversation = _build_conversation(history, system_msg)
     conversation.append({"role": "user", "content": user_message})
 
+    # RAG retrieval for chat
     context_chunks = []
     if RAG_AVAILABLE:
         try:
             query_embedding = embed_text(user_message)
             context_chunks = query_chunks(session_id, query_embedding, n_results=5)
-            print(f"[DIAG] RAG_AVAILABLE: {RAG_AVAILABLE}")
-            print(f"[DIAG] context_chunks count: {len(context_chunks)}")
-            print(f"[DIAG] context_chunks: {context_chunks}")
             if context_chunks:
                 conversation = _inject_rag_context(conversation, context_chunks)
         except Exception as e:
-            print(f"[DIAG] RAG exception: {e}")
-    else:
-        print("[DIAG] RAG not available — skipping")
+            print(f"RAG retrieval failed (non-fatal): {e}")
 
     reply = chatbotClaude(conversation, 0.2)
-    
     citations_str = _format_citations(context_chunks)
-    print(f"[DIAG] citations_str: '{citations_str}'")
-    
-    final_response = reply + citations_str
-    print(f"[DIAG] final_response tail: '{final_response[-200:]}'")
 
-    return PlainTextResponse(final_response)
+    return PlainTextResponse(reply + citations_str)
 
 
 async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
@@ -164,6 +205,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
 
     combined_text = "\n\n".join(processed["texts"]) if processed["texts"] else ""
 
+    # Ingest uploaded documents into ChromaDB
     if RAG_AVAILABLE and combined_text:
         try:
             for (_, filename), text in zip(raw_files, processed["texts"]):
@@ -205,6 +247,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         top_papers = await loop.run_in_executor(pool, get_top_papers, comparison)
     print(f"[DEBUG] Top papers: {len(top_papers)}")
 
+    # Ingest PubMed papers into ChromaDB
     if RAG_AVAILABLE and top_papers:
         try:
             ingest_pubmed_papers(session_id, top_papers)
@@ -212,6 +255,7 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
         except Exception as e:
             print(f"[RAG] PubMed ingestion failed (non-fatal): {e}")
 
+    # RAG retrieval for analysis context
     context_chunks = []
     if RAG_AVAILABLE:
         try:
@@ -254,19 +298,20 @@ async def analysis_route(user: dict, session_id: str, files: list[UploadFile]):
     filenames = [f for _, f in raw_files]
     filename = ", ".join(filenames) if filenames else "medical_report.pdf"
 
-    if context_chunks:
-        try:
-            await save_citations(session_id, "analysis", [
-                {**chunk, "timestamp": datetime.now(timezone.utc).isoformat()}
-                for chunk in context_chunks
-            ])
-        except Exception as e:
-            print(f"[Citations] Save failed (non-fatal): {e}")
-
     await set_analysis_result(
         session_id,
         {"report": report, "summary": summary, "pdf": pdf_base64, "entities": entities},
         filename
+    )
+
+    # Εισαγωγή του summary στο chat history ώστε να είναι διαθέσιμο στη συνέχεια
+    await update_mode_history(
+        session_id,
+        "chat",
+        {
+            "role": "assistant",
+            "content": f"I have completed the analysis of your medical documents. Here is a summary:\n\n{summary}"
+        }
     )
 
     file_meta = json.dumps({
