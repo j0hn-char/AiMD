@@ -45,6 +45,7 @@ def add_chunks(session_id: str, chunks: list[dict]):
 def query_chunks(session_id: str, query_embedding: list[float], n_results: int = 5) -> list[dict]:
     """
     Retrieve top-n relevant chunks with metadata for citations.
+    Re-ranks results using stored feedback_score so upvoted chunks surface higher.
     Returns list of { "text": str, "source": str, "filename": str, "score": float }
     """
     collection = get_collection(session_id)
@@ -52,9 +53,11 @@ def query_chunks(session_id: str, query_embedding: list[float], n_results: int =
     if count == 0:
         return []
 
+    # Fetch more candidates so re-ranking has room to work
+    fetch_n = min(n_results * 3, count)
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=min(n_results, count),
+        n_results=fetch_n,
         include=["documents", "metadatas", "distances"]
     )
 
@@ -67,14 +70,24 @@ def query_chunks(session_id: str, query_embedding: list[float], n_results: int =
         results["metadatas"][0],
         results["distances"][0]
     ):
+        cosine_sim = round(1 - dist, 3)
+        feedback = meta.get("feedback_score", 0.0)
+        # Combined score: cosine similarity boosted/penalised by feedback
+        combined = cosine_sim + feedback
         chunks.append({
             "text": doc,
             "source": meta.get("source", "unknown"),
             "filename": meta.get("filename") or meta.get("title", "Unknown source"),
-            "score": round(1 - dist, 3)  # cosine similarity
+            "score": round(cosine_sim, 3),   # show raw similarity in UI
+            "combined_score": combined,
         })
 
-    return chunks
+    # Re-rank by combined score, return top n
+    chunks.sort(key=lambda x: x["combined_score"], reverse=True)
+    for c in chunks:
+        c.pop("combined_score")  # clean up before returning
+
+    return chunks[:n_results]
 
 
 def update_chunk_score(session_id: str, chunk_ids: list[str], delta: float):
