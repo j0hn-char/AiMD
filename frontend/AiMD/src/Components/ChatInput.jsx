@@ -1,11 +1,8 @@
-export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onCancel, isThinking, fileInputRef, files, onFileChange }) {
+export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onCancel, isThinking, fileInputRef, files, onFileChange, mode }) {
 
   const handleFileChange = (e) => {
-    // Διαβάζουμε τα File objects ΑΜΕΣΩΣ — πριν οποιοδήποτε reset
     const newFiles = Array.from(e.target.files || []);
     if (newFiles.length === 0) return;
-
-    // Συνδυάζουμε με τα ήδη επιλεγμένα, χωρίς functional updater (πιο ασφαλές)
     const existing = Array.isArray(files) ? files : [];
     const merged = [...existing];
     for (const f of newFiles) {
@@ -13,8 +10,6 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
       if (!duplicate) merged.push(f);
     }
     onFileChange(merged);
-
-    // Reset ΜΕΤΑ — ώστε το ίδιο αρχείο να μπορεί να επιλεγεί ξανά
     setTimeout(() => { if (fileInputRef.current) fileInputRef.current.value = ""; }, 0);
   };
 
@@ -43,7 +38,7 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
         onChange={handleFileChange}
       />
 
-      {hasFiles && (
+      {hasFiles && mode === "analysis" && (
         <div className="flex flex-wrap gap-2">
           {fileList.map((file, i) => (
             <div
@@ -68,14 +63,14 @@ export default function ChatInput({ inputValue, onChange, onKeyDown, onSend, onC
       <div className="flex flex-col sm:flex-row gap-3">
         <button
           onClick={() => fileInputRef.current.click()}
-          disabled={isThinking}
+          disabled={isThinking || mode !== "analysis"}
           className="px-4 py-3 rounded-2xl text-white/50 hover:text-white transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
             background: 'rgba(255,255,255,0.06)',
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(8px)',
           }}
-          onMouseEnter={e => !isThinking && (e.currentTarget.style.borderColor = 'rgba(34,211,238,0.4)')}
+          onMouseEnter={e => !(isThinking || mode !== "analysis") && (e.currentTarget.style.borderColor = 'rgba(34,211,238,0.4)')}
           onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
         >
           🔗

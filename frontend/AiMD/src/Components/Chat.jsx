@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import FilesDrawer from "./FilesDrawer";
 import GradientText from "./GradientText";
 import ChatWindow from "./ChatWindow";
 import ChatInput from "./ChatInput";
@@ -9,9 +10,23 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const setThinking = (val) => { setIsThinking(val); onThinkingChange?.(val); };
   const [files, setFiles] = useState([]);
   const [mode, setMode] = useState("chat");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const drawerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const abortControllerRef = useRef(null);
+
+  const openDrawer = () => { setDrawerVisible(true); setDrawerOpen(true); };
+  const closeDrawer = () => {
+    if (drawerRef.current) {
+      drawerRef.current.style.width = '0px';
+      setTimeout(() => setDrawerVisible(false), 300);
+    } else {
+      setDrawerVisible(false);
+    }
+    setDrawerOpen(false);
+  };
 
   const scrollToEnd = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToEnd, [chat.messages]);
@@ -42,20 +57,12 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
     }
   };
 
-  // files είναι πλέον File[] αντί για μεμονωμένο File
-  const sendMessage = async (files = []) => {
+  const sendMessage = async (fileList = []) => {
     const message = inputValue.trim();
-    if (!message && files.length === 0) return;
+    if (!message && fileList.length === 0) return;
 
-    // Για την εμφάνιση στο chat bubble δείχνουμε τα ονόματα των αρχείων
-    const fileDisplay = files.length > 0
-      ? { name: files.map(f => f.name).join(", ") }
-      : null;
-
-    const newMessages = [
-      ...chat.messages,
-      { content: message, isUser: true, file: fileDisplay, id: Date.now() + Math.random() }
-    ];
+    const fileDisplay = fileList.length > 0 ? { name: fileList.map(f => f.name).join(", ") } : null;
+    const newMessages = [...chat.messages, { content: message, isUser: true, file: fileDisplay, id: Date.now() + Math.random() }];
     onUpdateMessages(newMessages);
     setInputValue("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -72,13 +79,10 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
 
       const aiMessageId = Date.now() + Math.random();
       abortControllerRef.current = new AbortController();
-
       const formData = new FormData();
       formData.append("session_id", chat.id);
       formData.append("message", message);
-
-      // Προσθέτουμε κάθε αρχείο με το ίδιο key "files" — το FastAPI το διαβάζει ως list
-      for (const file of files) {
+      for (const file of fileList) {
         formData.append("files", file);
       }
 
@@ -106,12 +110,14 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
         const { done, value } = await reader.read();
         if (done) break;
         fullContent += decoder.decode(value, { stream: true });
+
         if (fullContent.includes("__FILE__") && fullContent.includes("__ENDFILE__")) {
           const fileStart = fullContent.indexOf("__FILE__") + 8;
           const fileEnd = fullContent.indexOf("__ENDFILE__");
           attachedFile = JSON.parse(fullContent.slice(fileStart, fileEnd));
           fullContent = fullContent.slice(fileEnd + 11);
         }
+
         let tempContent = fullContent;
         if (tempContent.includes("__CITATIONS__") && tempContent.includes("__ENDCITATIONS__")) {
           const citStart = tempContent.indexOf("__CITATIONS__") + 13;
@@ -126,6 +132,7 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
           tempContent = tempContent.slice(0, tempContent.indexOf("__ENTITIES__"));
         }
         displayContent = tempContent;
+
         streamedMessages = [...newMessages, { content: displayContent, isUser: false, file: attachedFile, citations, entities, id: aiMessageId }];
         onUpdateMessages(streamedMessages);
       }
@@ -152,74 +159,99 @@ export default function Chat({ chat, onUpdateMessages, token, apiFetch, onThinki
   const handleKeyPress = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      // διαβάζουμε από το state, όχι από το fileInputRef (που είναι ήδη reset)
       sendMessage(files);
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center p-4 gap-6 h-screen">
-      <div className="flex items-center justify-center gap-4 pt-2">
-        <img src="/logo.svg" className="w-20 h-20" />
-        <GradientText
-          colors={["#0ea5e9", "#67e8f9", "#0d9488", "#67e8f9", "#0ea5e9"]}
-          animationSpeed={6}
-          showBorder={false}
-          className="text-4xl sm:text-4xl lg:text-5xl font-bold" style={{ fontFamily: "'Outfit', sans-serif" }}
-        >
-          Welcome to AiMD
-        </GradientText>
-      </div>
+    <div className="flex-1 flex h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col items-center p-4 gap-6 overflow-hidden min-w-0">
 
-      <div
-        className="relative w-72 flex items-center px-1 py-1 rounded-2xl"
-        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(12px)" }}
-      >
+        <div className="flex items-center justify-between w-full max-w-6xl pt-2">
+          <div className="w-16 flex-shrink-0" />
+          <div className="flex items-center gap-3 justify-center">
+            <img src="/logo.svg" className="w-12 h-12" />
+            <GradientText
+              colors={["#0ea5e9", "#67e8f9", "#0d9488", "#67e8f9", "#0ea5e9"]}
+              animationSpeed={6}
+              showBorder={false}
+              className="text-4xl sm:text-4xl lg:text-5xl font-bold"
+              style={{ fontFamily: "'Outfit', sans-serif" }}
+            >
+              Welcome to AiMD
+            </GradientText>
+          </div>
+          <button
+            onClick={() => drawerOpen ? closeDrawer() : openDrawer()}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl hover:text-white/70 transition text-xs flex-shrink-0"
+            style={{
+              background: drawerOpen ? 'rgba(14,165,233,0.15)' : 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.5)',
+              cursor: 'pointer',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M10 2v3h3" stroke="currentColor" strokeWidth="1.3"/>
+            </svg>
+            Files
+          </button>
+        </div>
+
         <div
-          className={`absolute top-1 bottom-1 w-[calc(50%-7px)] rounded-xl transition-all duration-300 ${
-            mode === "chat"
-              ? "left-1 bg-gradient-to-r from-sky-500/80 to-cyan-500/80"
-              : "left-[calc(50%+3px)] bg-gradient-to-r from-emerald-500/80 to-teal-600/80"
-          }`}
-          style={{ backdropFilter: "blur(8px)", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}
-        />
-        <button
-          onClick={() => { setMode("chat"); onModeChange?.(false); }}
-          className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "chat" ? "text-white" : "text-white/50 hover:text-white/80"}`}
+          className="relative w-72 flex items-center px-1 py-1 rounded-2xl"
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(12px)" }}
         >
-          💬 Chat
-        </button>
-        <button
-          onClick={() => { setMode("analysis"); onModeChange?.(true); }}
-          className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "analysis" ? "text-white" : "text-white/50 hover:text-white/80"}`}
-        >
-          🧠 Analysis
-        </button>
-      </div>
+          <div
+            className={`absolute top-1 bottom-1 w-[calc(50%-7px)] rounded-xl transition-all duration-300 ${
+              mode === "chat"
+                ? "left-1 bg-gradient-to-r from-sky-500/80 to-cyan-500/80"
+                : "left-[calc(50%+3px)] bg-gradient-to-r from-emerald-500/80 to-teal-600/80"
+            }`}
+            style={{ backdropFilter: "blur(8px)", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}
+          />
+          <button
+            onClick={() => { setMode("chat"); onModeChange?.(false); }}
+            className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "chat" ? "text-white" : "text-white/50 hover:text-white/80"}`}
+          >
+            💬 Chat
+          </button>
+          <button
+            onClick={() => { setMode("analysis"); onModeChange?.(true); }}
+            className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 w-1/2 ${mode === "analysis" ? "text-white" : "text-white/50 hover:text-white/80"}`}
+          >
+            🧠 Analysis
+          </button>
+        </div>
 
-      <div
-        className="w-full max-w-6xl flex flex-col flex-1 min-h-0 rounded-3xl p-6"
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)",
-        }}
-      >
-        <ChatWindow messages={chat.messages} isThinking={isThinking} messagesEndRef={messagesEndRef} token={token} sessionId={chat.id} />
-        <ChatInput
-          inputValue={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyPress}
-          onSend={sendMessage}
-          onCancel={cancelMessage}
-          isThinking={isThinking}
-          fileInputRef={fileInputRef}
-          files={files}
-          onFileChange={setFiles}
-        />
+        <div
+          className="w-full max-w-6xl flex flex-col flex-1 min-h-0 rounded-3xl p-6"
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)",
+          }}
+        >
+          <ChatWindow messages={chat.messages} isThinking={isThinking} messagesEndRef={messagesEndRef} token={token} sessionId={chat.id} />
+          <ChatInput
+            inputValue={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyPress}
+            onSend={sendMessage}
+            onCancel={cancelMessage}
+            isThinking={isThinking}
+            fileInputRef={fileInputRef}
+            files={files}
+            onFileChange={setFiles}
+            mode={mode}
+          />
+        </div>
+
       </div>
+      {drawerVisible && <FilesDrawer drawerRef={drawerRef} messages={chat.messages} onClose={closeDrawer} />}
     </div>
   );
 }
